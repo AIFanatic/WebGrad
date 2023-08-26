@@ -16,5 +16,5 @@ describe("Tensor creation", () => {
 
     const c = new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]]); // 3D
     assert(equal(c, new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])));
-    assert(equal(c.shape, [2, 2, 12]));
+    assert(equal(c.shape, [2, 2, 2]));
 })

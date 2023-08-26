@@ -1,17 +1,34 @@
-const glob = require('glob');
-const { execSync } = require('child_process');
+import fs from "fs";
+import path from "path";
+import { execSync } from "child_process";
 
-// File pattern using wildcard (*.js)
-const filePattern = './test/*test.ts';
+function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
+    const files = fs.readdirSync(dirPath)
 
-// Find all matching file paths
-glob(filePattern, (err, files) => {
-    if (err) throw err;
+    for (let file of files) {
+        if (fs.statSync(dirPath + "/" + file).isDirectory()) {
+            arrayOfFiles = getAllFiles(dirPath + "/" + file, arrayOfFiles);
+        } else {
+            arrayOfFiles.push(path.join(dirPath, "/", file));
+        }
+    }
 
-    // Iterate over the file paths and run each file individually
-    files.forEach((file) => {
-        console.log(`--------`);
-        console.log(`Running test: ${file}`);
-        execSync(`node -r esbuild-runner/register ${file}`, { stdio: 'inherit' });
-    });
-});
+    return arrayOfFiles;
+}
+
+function getFilesByPattern(dirPath: string, pattern: string): string[] {
+    const files = getAllFiles(dirPath);
+    let matchingFiles: string[] = [];
+    for (let file of files) {
+        if (file.includes(pattern)) matchingFiles.push(file);
+    }
+    return matchingFiles;
+}
+
+const files = getFilesByPattern("./test", "test.ts");
+
+for(let file of files) {
+    console.log(`--------`);
+    console.log(`Running test: ${file}`);
+    execSync(`node -r esbuild-runner/register ${file}`, { stdio: 'inherit' });
+}

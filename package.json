@@ -1,0 +1,24 @@
+{
+  "name": "micrograd-ts",
+  "version": "1.0.0",
+  "main": "dist/micrograd-ts.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/micrograd-ts.js",
+  "files": [
+    "/dist"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build:types": "tsc --emitDeclarationOnly",
+    "build": "esbuild ./src/index.ts --bundle --outfile=./dist/micrograd-ts.js --target=es2020 --format=esm",
+    "dev": "esbuild ./src/index.ts --bundle --outfile=./dist/micrograd-ts.js --target=es2020 --format=esm --watch",
+    "test": "esr ./test/run.ts",
+    "build:tests": "esbuild ./test/index.ts --bundle --outfile=./dist/test/micrograd-ts-tests.js --target=es2020 --format=esm --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.17.18",
+    "esbuild-runner": "^2.2.2",
+    "typescript": "^5.1.3"
+  },
+  "dependencies": {}
+}

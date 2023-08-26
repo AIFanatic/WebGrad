@@ -1,0 +1,36 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body id="main">
+
+    <div class="border padded">
+        <span id="loss">TEST</span>
+    </div>
+    <div class="parent">
+        <div id="network" class="flex border padded"></div>
+        <div id="training" class="flex border"></div>
+    </div>
+
+    <script type="importmap">
+        {
+          "imports": {
+            "micrograd-ts": "../../../dist/micrograd-ts.js"
+          }
+        }
+    </script>
+    <script src=https://cdnjs.cloudflare.com/ajax/libs/viz.js/1.8.0/viz-lite.js></script>
+    <script type="module">
+        import { GPT2Demo } from './index.js';
+
+        const lossElement = document.getElementById("loss");
+        const networkElement = document.getElementById("network");
+        const trainingElement = document.getElementById("training");
+
+        const demo = new GPT2Demo(lossElement, networkElement, trainingElement);
+    </script>
+</body>
+
+</html>

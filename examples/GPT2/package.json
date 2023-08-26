@@ -1,0 +1,16 @@
+{
+  "name": "micrograd-example-gpt2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/viz.js": "^2.1.2",
+    "esbuild": "^0.18.0",
+    "typescript": "^5.1.3"
+  },
+  "scripts": {
+    "dev": "esbuild --bundle --external:micrograd-ts ./src/index.ts --outfile=./dist/index.js --target=es2020 --format=esm --loader:.json=file --loader:.txt=file --watch",
+    "build": "esbuild --bundle --external:micrograd-ts ./src/index.ts --outfile=./dist/index.js --target=es2020 --format=esm --loader:.json=file --loader:.txt=file"
+  },
+  "dependencies": {}
+}

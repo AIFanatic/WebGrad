@@ -1,0 +1,28 @@
+svg {
+    width: 1024px;
+    height: 1024px;
+}
+
+.parent {
+    display: flex;
+    justify-content: space-evenly;
+}
+
+.flex {
+    display: flex;
+    border: 1px solid;
+}
+
+.border {
+    border: 1px solid;
+}
+
+.padded {
+    padding: 10px;
+}
+
+#network {
+    width: 512px;
+    height: 512px;
+    overflow: scroll;
+}

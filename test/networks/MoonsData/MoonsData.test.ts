@@ -1,9 +1,5 @@
 import { describe, assert, equal, TensorFactory } from "../../TestUtils";
-import { Tensor } from "../../../src/Tensor";
-
-import { Random } from "../../../src/Random";
-import { Module } from "../../../src/Module";
-import { nn } from "../../../src";
+import { Module, nn, Random, Tensor } from "../../../src";
 
 Random.SetRandomSeed(1337);
 

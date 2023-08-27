@@ -1,12 +1,13 @@
 import { Matrix } from "../src/Matrix";
 import { Tensor } from "../src/Tensor";
 
-export function describe(name: string, func: Function) {
+export async function describe(name: string, func: Function) {
     const colors = {"red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m"};
 
     let passed = false;
     try {
-        func();
+        await func()
+
         console.log(`${colors["yellow"]}[${name}] ${colors["green"]} Passed`);
 
     } catch (error) {

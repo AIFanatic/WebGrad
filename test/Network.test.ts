@@ -50,10 +50,6 @@ describe("1 dense layer", () => {
         p.data = p.data.sub(p.grad.mul(learning_rate));
     }
 
-    console.log(`loss ${loss}`);
-    console.log(`model.dense1.weight ${model.dense1.weight}`);
-    console.log(`model.dense1.bias ${model.dense1.bias}`);
-
     assert(equal(loss, TensorFactory({data: [0.40608614805], grad: [1]})));
     assert(equal(model.dense1.weight, TensorFactory({data: [[-0.59280177,-0.00458459]], grad: [[-0.349823,-0.16154099999999993]]})));
     assert(equal(model.dense1.bias, TensorFactory({data: [0.1816893], grad: [-0.75893]})));
@@ -147,6 +143,5 @@ describe("3 dense layers", () => {
         last_loss = total_loss2;
     }
 
-    // console.log(`trained for ${epochs}, loss: ${last_loss}`);
     assert(equal(last_loss, TensorFactory({data: [0.017161300405859947], grad: [0]})));
 })

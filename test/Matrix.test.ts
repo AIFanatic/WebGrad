@@ -109,10 +109,6 @@ describe("Matmul 1", () => {
     const b = new Matrix([[5, 6], [7, 8]]);
     const c = Matrix.dot(a, b);
 
-    console.log(`a ${a}`);
-    console.log(`b ${b}`);
-    console.log(`c ${c}`);
-
     assert(equal(c, new Matrix([[19, 22], [43, 50]], [2, 2])));
 })
 
@@ -184,7 +180,6 @@ describe("Sum", () => {
     assert(equal(e, new Matrix([10], [1])));
 
     const f = Matrix.sum(c, 0);
-    console.log(`f ${f}`)
     assert(equal(f, new Matrix([0, 6], [2])));
 
     const g = Matrix.sum(c, 1);
@@ -513,7 +508,6 @@ describe("Permute", () => {
     const eT = Matrix.permute(e);
 
 
-    console.log(`${e.permute().reshape([1,4])}`)
     assert(equal(e.permute(), new Matrix([[1,3], [2,4]])));
     assert(equal(e.permute().reshape([1,4]), new Matrix([[1,3,2,4]])));
 });

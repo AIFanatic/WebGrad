@@ -1,6 +1,21 @@
 import { Operations } from ".";
 import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
+import { Device } from "./backend/Backend";
+
+export interface TensorOptions {
+    _children?: Tensor[];
+    _op?: Operation;
+    device?: Device;
+    requires_grad?: boolean;
+};
+
+const DefaultTensorOptions: TensorOptions = {
+    _children: [],
+    _op: null,
+    device: Device.CPU,
+    requires_grad: false,
+};
 
 export class Tensor {
     public data: Matrix;
@@ -15,8 +30,10 @@ export class Tensor {
         return this.data.shape;
     }
 
-    constructor(data: Tensor | Matrix | any[] | number, _children: Tensor[] = [], _op: Operation = null) {
+    constructor(data: Tensor | Matrix | any[] | number, options?: TensorOptions) {
         this.id = "P" + Math.floor(Math.random() * 1000000).toString().padStart(6, "0");
+
+        const _options: TensorOptions = Object.assign({}, DefaultTensorOptions, options);
 
         if (data instanceof Matrix) this.data = data;
         else if (data instanceof Tensor) this.data = data.data.copy();
@@ -24,9 +41,9 @@ export class Tensor {
         else this.data = new Matrix([data]);
 
         this.grad = Matrix.zeros(this.data.shape);
-        this._prev = new Set(_children);
-        this._children = _children;
-        this._op = _op;
+        this._prev = new Set(_options._children);
+        this._children = _options._children;
+        this._op = _options._op;
     }
 
     public backward() {

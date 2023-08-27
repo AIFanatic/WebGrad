@@ -23,7 +23,7 @@ export class Add extends Operation {
     public forward(x: Tensor, y: Tensor): Tensor {
         this.x = x;
         this.y = y;
-        return new Tensor(x.data.add(y.data), [x, y], this);
+        return new Tensor(x.data.add(y.data), {_children: [x, y], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -47,7 +47,7 @@ export class Mul extends Operation {
         this.x = x;
         this.y = y;
 
-        return new Tensor(x.data.mul(y.data), [x, y], this);
+        return new Tensor(x.data.mul(y.data), {_children: [x, y], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -62,7 +62,7 @@ export class Pow extends Operation {
     public forward(x: Tensor, y: Tensor): Tensor {
         this.x = x;
         this.y = y;
-        return new Tensor(x.data.pow(y.data), [x], this);
+        return new Tensor(x.data.pow(y.data), {_children: [x], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -82,7 +82,7 @@ export class Matmul extends Operation {
     public forward(x: Tensor, y: Tensor): Tensor {
         this.x = x;
         this.y = y;
-        return new Tensor(Matrix.dot(x.data, y.data), [x, y], this);
+        return new Tensor(Matrix.dot(x.data, y.data), {_children: [x, y], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -95,7 +95,7 @@ export class Sum extends Operation {
 
     public forward(x: Tensor, axis: number | null = null, keepdims: boolean = false): Tensor {
         this.shape = x.shape.slice();
-        return new Tensor(Matrix.sum(x.data, axis, keepdims), [x], this);
+        return new Tensor(Matrix.sum(x.data, axis, keepdims), {_children: [x], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -107,7 +107,7 @@ export class Reshape extends Operation {
     private shape: number | number[];
     public forward(x: Tensor, shape: number | number[]): Tensor {
         this.shape = x.shape;
-        return new Tensor(Matrix.reshape(x.data, shape), [x], this);
+        return new Tensor(Matrix.reshape(x.data, shape), {_children: [x], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -118,7 +118,7 @@ export class Reshape extends Operation {
 export class Exp extends Operation {
     private out: Tensor;
     public forward(x: Tensor): Tensor {
-        this.out = new Tensor(Matrix.exp(x.data), [x], this);
+        this.out = new Tensor(Matrix.exp(x.data), {_children: [x], _op: this});
         return this.out;
     }
 
@@ -130,7 +130,7 @@ export class Exp extends Operation {
 export class Relu extends Operation {
     private out: Tensor;
     public forward(x: Tensor): Tensor {
-        this.out = new Tensor(Matrix.maximum(Matrix.zeros(x.shape), x.data), [x], this);
+        this.out = new Tensor(Matrix.maximum(Matrix.zeros(x.shape), x.data), {_children: [x], _op: this});
         return this.out;
     }
 
@@ -143,7 +143,7 @@ export class Permute extends Operation {
     private axes: number[];
     public forward(x: Tensor, axes: number[]): Tensor {
         this.axes = axes;
-        return new Tensor(Matrix.permute(x.data, axes), [x], this);
+        return new Tensor(Matrix.permute(x.data, axes), {_children: [x], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
@@ -157,7 +157,7 @@ export class Tranpose extends Operation {
     public forward(x: Tensor, dim0: number, dim1: number): Tensor {
         this.dim0 = dim0;
         this.dim1 = dim1;
-        return new Tensor(Matrix.transpose(x.data, dim0, dim1), [x], this);
+        return new Tensor(Matrix.transpose(x.data, dim0, dim1), {_children: [x], _op: this});
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {

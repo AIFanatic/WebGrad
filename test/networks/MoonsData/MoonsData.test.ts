@@ -48,8 +48,8 @@ describe("MoonsData test", () => {
 
     // Create data - This needs to be first because of Random seed
     const [Xb, yb] = generateData(100);
-    const X = new Tensor(Xb);
-    const y = new Tensor(yb).reshape([100, 1]);
+    const X = new Tensor(Xb, {requires_grad: true});
+    const y = new Tensor(yb, {requires_grad: true}).reshape([100, 1]);
     
     // Create model
     const model = new SimpleModel(2, 1);

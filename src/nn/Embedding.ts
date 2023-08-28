@@ -10,7 +10,7 @@ export class Embedding extends Module {
 
     constructor(num_embeddings: number, embedding_dim: number) {
         super();
-        this.weight = new Tensor(Matrix.uniform(-1, 1, [num_embeddings, embedding_dim]));
+        this.weight = new Tensor(Matrix.uniform(-1, 1, [num_embeddings, embedding_dim]), {requires_grad: true});
 
         this.num_embeddings = num_embeddings;
         this.embedding_dim = embedding_dim;

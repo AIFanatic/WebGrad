@@ -2,8 +2,8 @@ import { describe, assert, equal, TensorFactory } from "./TestUtils";
 import { Tensor } from "../src/Tensor";
 
 describe("Add", () => {
-    const a = new Tensor([1,2,3]);
-    const b = new Tensor([4,5,6]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
+    const b = new Tensor([4,5,6], {requires_grad: true});
     const c = a.add(b);
 
     c.backward();
@@ -18,8 +18,8 @@ describe("Add", () => {
 })
 
 describe("Sub", () => {
-    const a = new Tensor([1,2,3]);
-    const b = new Tensor([4,5,6]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
+    const b = new Tensor([4,5,6], {requires_grad: true});
     const c = a.sub(b);
 
     c.backward();
@@ -30,8 +30,8 @@ describe("Sub", () => {
 })
 
 describe("Mul", () => {
-    const a = new Tensor([1,2,3]);
-    const b = new Tensor([4,5,6]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
+    const b = new Tensor([4,5,6], {requires_grad: true});
     const c = a.mul(b);
 
     c.backward();
@@ -42,8 +42,8 @@ describe("Mul", () => {
 })
 
 describe("Div", () => {
-    const a = new Tensor([1,2,3]);
-    const b = new Tensor([4,5,6]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
+    const b = new Tensor([4,5,6], {requires_grad: true});
     const c = a.div(b);
 
     c.backward();
@@ -54,7 +54,7 @@ describe("Div", () => {
 })
 
 describe("Pow", () => {
-    const a = new Tensor([4,5,6]);
+    const a = new Tensor([4,5,6], {requires_grad: true});
     const b = a.pow(2);
 
     b.backward();
@@ -64,8 +64,8 @@ describe("Pow", () => {
 })
 
 describe("Matmul", () => {
-    const a = new Tensor([[1,2], [3,4]]);
-    const b = new Tensor([[5,6], [7,8]]);
+    const a = new Tensor([[1,2], [3,4]], {requires_grad: true});
+    const b = new Tensor([[5,6], [7,8]], {requires_grad: true});
     const c = a.matmul(b);
 
     c.backward();
@@ -76,7 +76,7 @@ describe("Matmul", () => {
 })
 
 describe("Sum", () => {
-    const a = new Tensor([1,2,3]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
     const c = a.sum();
 
     c.backward();
@@ -86,7 +86,7 @@ describe("Sum", () => {
 })
 
 describe("Mean", () => {
-    const a = new Tensor([1,2,3]);
+    const a = new Tensor([1,2,3], {requires_grad: true});
     const c = a.mean();
 
     c.backward();
@@ -96,7 +96,7 @@ describe("Mean", () => {
 })
 
 describe("Rehape", () => {
-    const a = new Tensor([1,2,3,4]);
+    const a = new Tensor([1,2,3,4], {requires_grad: true});
     const c = a.reshape([2,2]);
 
     c.backward();
@@ -106,7 +106,7 @@ describe("Rehape", () => {
 })
 
 describe("Exp", () => {
-    const a = new Tensor([1,2,3,4]);
+    const a = new Tensor([1,2,3,4], {requires_grad: true});
     const c = a.exp();
 
     c.backward();
@@ -116,7 +116,7 @@ describe("Exp", () => {
 })
 
 describe("ReLu", () => {
-    const a = new Tensor([-1,2,3,4]);
+    const a = new Tensor([-1,2,3,4], {requires_grad: true});
     const c = a.relu();
 
     c.backward();
@@ -126,7 +126,7 @@ describe("ReLu", () => {
 })
 
 describe("Reciprocal", () => {
-    const a = new Tensor([1,2,3,4]);
+    const a = new Tensor([1,2,3,4], {requires_grad: true});
     const b = a.reciprocal()
     
     b.backward()
@@ -136,7 +136,7 @@ describe("Reciprocal", () => {
 })
 
 describe("Sigmoid", () => {
-    const a = new Tensor([1,2,3,4]);
+    const a = new Tensor([1,2,3,4], {requires_grad: true});
     const b = a.sigmoid();
 
     b.backward();
@@ -146,7 +146,7 @@ describe("Sigmoid", () => {
 })
 
 describe("Tanh", () => {
-    const a = new Tensor([1,2,3,4]);
+    const a = new Tensor([1,2,3,4], {requires_grad: true});
     const c = a.tanh();
 
     c.backward();
@@ -156,7 +156,7 @@ describe("Tanh", () => {
 })
 
 describe("Permute", () => {
-    const a = new Tensor([[1, 2], [3, 4], [5, 6]]);
+    const a = new Tensor([[1, 2], [3, 4], [5, 6]], {requires_grad: true});
     const c = a.permute([1,0]);
 
     c.backward();
@@ -166,7 +166,7 @@ describe("Permute", () => {
 })
 
 describe("Transpose", () => {
-    const a = new Tensor([[1, 2], [3, 4], [5, 6]]);
+    const a = new Tensor([[1, 2], [3, 4], [5, 6]], {requires_grad: true});
     const c = a.transpose(1,0);
 
     c.backward();
@@ -176,9 +176,9 @@ describe("Transpose", () => {
 })
 
 describe("Simple model", () => {
-    const weight = new Tensor([[-0.4869, -0.0896], [-0.0051, -0.3460], [ 0.1421, -0.5443]]);
+    const weight = new Tensor([[-0.4869, -0.0896], [-0.0051, -0.3460], [ 0.1421, -0.5443]], {requires_grad: true});
 
-    let x = new Tensor([[2.0, 3.0, -1.0]]);
+    let x = new Tensor([[2.0, 3.0, -1.0]], {requires_grad: true});
     x = x.matmul(weight);
 
     const pred = x;

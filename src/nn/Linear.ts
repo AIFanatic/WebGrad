@@ -11,8 +11,8 @@ export class Linear extends Module {
 
     constructor(in_features: number, out_features: number) {
         super();
-        this.weight = new Tensor(Matrix.uniform(-1, 1, [out_features, in_features]));
-        this.bias = new Tensor(Matrix.zeros([out_features]));
+        this.weight = new Tensor(Matrix.uniform(-1, 1, [out_features, in_features]), {requires_grad: true});
+        this.bias = new Tensor(Matrix.zeros([out_features]), {requires_grad: true});
 
         this.in_features = in_features;
         this.out_features = out_features;

@@ -23,6 +23,8 @@ export class Tensor {
     public _children: Tensor[];
     public _prev: Set<Tensor>;
     public _op: Operation;
+    public device: Device;
+    public requires_grad: boolean;
 
     public id: string;
 
@@ -35,21 +37,34 @@ export class Tensor {
 
         const _options: TensorOptions = Object.assign({}, DefaultTensorOptions, options);
 
+        if (_options._children.length !== 0) {
+            _options.device = _options._children[0].device;
+            _options.requires_grad = _options._children[0].requires_grad;
+        }
+
         if (data instanceof Matrix) this.data = data;
         else if (data instanceof Tensor) this.data = data.data.copy();
         else if (Array.isArray(data)) this.data = new Matrix(data);
         else this.data = new Matrix([data]);
 
-        this.grad = Matrix.zeros(this.data.shape);
+        // console.log(`Creating tensor requires_grad: ${_options.requires_grad} children_len ${_options._children.length}`)
+        // if (_options.requires_grad === false && _options._children.length === 0) {
+        //     throw Error("")
+        // }
+        // this.grad = Matrix.zeros(this.data.shape);
+        this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
+        this.device = _options.device;
+        this.requires_grad = _options.requires_grad;
+        this._op = _options._op;
         this._prev = new Set(_options._children);
         this._children = _options._children;
-        this._op = _options._op;
     }
 
     public backward() {
         let topo: Tensor[] = [];
         let visited = new Set<Tensor>();
 
+        const thisShape = this.shape.slice();
         function build_topo(v: Tensor) {
             if (!visited.has(v)) {
                 visited.add(v);
@@ -87,12 +102,12 @@ export class Tensor {
     }
 
     public sub(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other));
+        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
         return this.add(otherTensor.mul(-1));
     }
 
     public mul(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other));
+        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
         return new Operations.Mul().forward(this, otherTensor);
     }
     
@@ -104,7 +119,7 @@ export class Tensor {
     public pow(other: Tensor | number): Tensor {
         // if ((other instanceof Tensor)) throw Error("Pow only supports scalars");
 
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other));
+        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
 
         // const otherTensor: Tensor = new Tensor(Matrix.full(this.data.shape, other));
         return new Operations.Pow().forward(this, otherTensor);
@@ -147,16 +162,16 @@ export class Tensor {
     }
 
     public reciprocal(): Tensor {
-        return new Tensor(Matrix.ones(this.data.shape)).div(this);
+        return new Tensor(Matrix.ones(this.data.shape), {device: this.device, requires_grad: this.requires_grad}).div(this);
     }
 
     public sigmoid(): Tensor {
-        return new Tensor(Matrix.ones(this.data.shape)).add((this.mul(-1)).exp()).reciprocal();
+        return new Tensor(Matrix.ones(this.data.shape), {device: this.device, requires_grad: this.requires_grad}).add((this.mul(-1)).exp()).reciprocal();
     }
 
     public tanh(): Tensor {
-        const two1 = new Tensor(2);
-        const two2 = new Tensor(2);
+        const two1 = new Tensor(2, {device: this.device, requires_grad: this.requires_grad});
+        const two2 = new Tensor(2, {device: this.device, requires_grad: this.requires_grad});
         return two1.mul((two2.mul(this).sigmoid())).sub(1);
     }
 

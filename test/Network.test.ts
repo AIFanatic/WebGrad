@@ -29,9 +29,9 @@ describe("1 dense layer", () => {
         [-0.4, 0.8],
         [-0.3, 0.9],
         [0.5, 0.3]
-    ]);
+    ], {requires_grad: true});
 
-    const yb = new Tensor([[1.0], [0.2], [0.3], [0.7]]);
+    const yb = new Tensor([[1.0], [0.2], [0.3], [0.7]], {requires_grad: true});
 
     const model = new SingleLayerModel(2, 1);
     model.dense1.weight = new Tensor([[-0.5963, -0.0062]]); // Match torch seed 1337
@@ -86,7 +86,7 @@ describe("3 dense layers", () => {
         const data_loss = pred.sub(y_tensor).pow(2).sum();
         
         // Reg loss
-        let reg_loss = new Tensor([0]);
+        let reg_loss = new Tensor([0], {requires_grad: true});
         for (let p of model.parameters()) {
             const w_sum = p.mul(p).sum();
             const p_shape_prod = Matrix.prod(new Matrix(p.data.shape));
@@ -107,27 +107,27 @@ describe("3 dense layers", () => {
         [3.0, -1.0, 0.5],
         [0.5, 1.0, 1.0],
         [1.0, 1.0, -1.0],
-    ]);
+    ], {requires_grad: true});
 
-    const Y = new Tensor([1.0, 0.2, 0.3, 0.7]);
+    const Y = new Tensor([1.0, 0.2, 0.3, 0.7], {requires_grad: true});
 
     const model = new SimpleModel(3, 2);
 
     // Matches torch weights and biases with seed 1337
-    model.dense1.weight = new Tensor([[-0.4869, -0.0051,  0.1421], [-0.0896, -0.3460, -0.5443], [ 0.0983,  0.2271, -0.3740], [-0.2777,  0.2408,  0.0935]]);
-    model.dense1.bias = new Tensor([-0.5111,  0.3082,  0.4363, -0.2963]);
+    model.dense1.weight = new Tensor([[-0.4869, -0.0051,  0.1421], [-0.0896, -0.3460, -0.5443], [ 0.0983,  0.2271, -0.3740], [-0.2777,  0.2408,  0.0935]], {requires_grad: true});
+    model.dense1.bias = new Tensor([-0.5111,  0.3082,  0.4363, -0.2963], {requires_grad: true});
 
-    model.dense2.weight = new Tensor([[ 0.1005,  0.2079,  0.0102, -0.0935], [ 0.3864, -0.1422,  0.3963,  0.4639], [-0.4852,  0.2358,  0.2884,  0.4469], [-0.0344,  0.3378, -0.3731, -0.2868]]);
-    model.dense2.bias = new Tensor([-0.2056, -0.1323, -0.0170,  0.1752]);
+    model.dense2.weight = new Tensor([[ 0.1005,  0.2079,  0.0102, -0.0935], [ 0.3864, -0.1422,  0.3963,  0.4639], [-0.4852,  0.2358,  0.2884,  0.4469], [-0.0344,  0.3378, -0.3731, -0.2868]], {requires_grad: true});
+    model.dense2.bias = new Tensor([-0.2056, -0.1323, -0.0170,  0.1752], {requires_grad: true});
 
-    model.dense3.weight = new Tensor([[ 0.0226,  0.0536,  0.0701, -0.2519], [ 0.1040,  0.2077, -0.4210,  0.2629]]);
-    model.dense3.bias = new Tensor([ 0.2708, -0.4257]);
+    model.dense3.weight = new Tensor([[ 0.0226,  0.0536,  0.0701, -0.2519], [ 0.1040,  0.2077, -0.4210,  0.2629]], {requires_grad: true});
+    model.dense3.bias = new Tensor([ 0.2708, -0.4257], {requires_grad: true});
 
     let last_loss;
     const epochs = 100;
     for (let k = 0; k < epochs; k++) {
-        const Xb = new Tensor(X);
-        const Yb = new Tensor(Y.reshape([Y.shape[0], 1]));
+        const Xb = new Tensor(X, {requires_grad: true});
+        const Yb = new Tensor(Y.reshape([Y.shape[0], 1]), {requires_grad: true});
         
         const total_loss = get_loss(model, Xb, Yb);
         model.zero_grad();

@@ -1,6 +1,6 @@
 import { describe, assert, equal, TensorFactory } from "./TestUtils";
 
-import { Tensor } from "../src/Tensor";
+import { MatrixToTensorBuffer, Tensor, TensorBufferToMatrix } from "../src/Tensor";
 
 import { Module } from "../src/Module";
 import { Matrix, nn } from "../src/";
@@ -47,7 +47,7 @@ describe("1 dense layer", () => {
 
     const learning_rate = 0.01;
     for (let p of model.parameters()) {
-        p.data = p.data.sub(p.grad.mul(learning_rate));
+        p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(p.grad.mul(learning_rate)));
     }
 
     assert(equal(loss, TensorFactory({data: [0.40608614805], grad: [1]})));
@@ -135,7 +135,7 @@ describe("3 dense layers", () => {
 
         for (let p of model.parameters()) {
             const learning_rate = Matrix.full(p.grad.shape, 0.1);
-            p.data = p.data.sub(learning_rate.mul(p.grad));
+            p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(learning_rate.mul(p.grad)));
         }
 
         const total_loss2 = get_loss(model, new Tensor(X), new Tensor(Y.reshape([Y.shape[0], 1])));

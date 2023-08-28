@@ -1,6 +1,6 @@
 import { Module } from "../Module";
 import { Matrix } from "../Matrix";
-import { Tensor } from "../Tensor";
+import { Tensor, TensorBufferToMatrix } from "../Tensor";
 
 export class Embedding extends Module {
     public weight: Tensor;
@@ -26,10 +26,10 @@ export class Embedding extends Module {
         const vb = va.reshape([1,1,this.num_embeddings]);
         const vc = vb.expand([...x.shape, this.num_embeddings]);
         const vocab_counter = vc;
-        const a = x.data.unsqueeze(2);
+        const a = TensorBufferToMatrix(x.data).unsqueeze(2);
         const b = vocab_counter.equal(a);
         const c = b.expand([...x.shape, this.num_embeddings]);
-        const d = c.dot(this.weight.data);
+        const d = c.dot(TensorBufferToMatrix(this.weight.data));
         
         return new Tensor(d);
     }

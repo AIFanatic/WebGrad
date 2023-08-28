@@ -1,5 +1,6 @@
 import { describe, assert, equal, TensorFactory } from "../../TestUtils";
 import { Module, nn, Random, Tensor } from "../../../src";
+import { MatrixToTensorBuffer, TensorBufferToMatrix } from "../../../src/Tensor";
 
 Random.SetRandomSeed(1337);
 
@@ -66,7 +67,7 @@ describe("MoonsData test", () => {
         loss.backward();
 
         for (let p of model.parameters()) {
-            p.data = p.data.sub(p.grad.mul(0.5));
+            p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(p.grad.mul(0.5)));
         }
 
         last_loss = loss;

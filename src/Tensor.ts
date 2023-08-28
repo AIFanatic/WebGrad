@@ -1,7 +1,27 @@
-import { Operations } from ".";
+import { Operations, Random } from ".";
 import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
-import { Device } from "./backend/Backend";
+import { Backend, Device } from "./backend/Backend";
+import { TensorBuffer } from "./backend/TensorBuffer";
+
+
+
+// TODO: Temp
+export function TensorBufferToMatrix(tensorBuffer: TensorBuffer): Matrix {
+    // return new Matrix(tensorBuffer.getData(), tensorBuffer.shape, tensorBuffer.strides, tensorBuffer.offset);
+    return new Matrix(tensorBuffer.getData());
+}
+
+export function MatrixToTensorBuffer(device: Device, matrix: Matrix): TensorBuffer {
+    const tf = Backend.CreateFromFloat32Array(device, matrix.data);
+    const tfShaped = Backend.CreateFromDataShapeAndStrides(tf, matrix.shape, matrix.strides, matrix.offset);
+    return tfShaped;
+}
+
+
+
+
+export type TensorDataTypes = Matrix | Tensor | TensorBuffer | Array<any> | Float32Array | number;
 
 export interface TensorOptions {
     _children?: Tensor[];
@@ -18,7 +38,7 @@ const DefaultTensorOptions: TensorOptions = {
 };
 
 export class Tensor {
-    public data: Matrix;
+    public data: TensorBuffer;
     public grad: Matrix;
     public _children: Tensor[];
     public _prev: Set<Tensor>;
@@ -32,7 +52,7 @@ export class Tensor {
         return this.data.shape;
     }
 
-    constructor(data: Tensor | Matrix | any[] | number, options?: TensorOptions) {
+    constructor(data: TensorDataTypes, options?: TensorOptions) {
         this.id = "P" + Math.floor(Math.random() * 1000000).toString().padStart(6, "0");
 
         const _options: TensorOptions = Object.assign({}, DefaultTensorOptions, options);
@@ -42,16 +62,22 @@ export class Tensor {
             _options.requires_grad = _options._children[0].requires_grad;
         }
 
-        if (data instanceof Matrix) this.data = data;
-        else if (data instanceof Tensor) this.data = data.data.copy();
-        else if (Array.isArray(data)) this.data = new Matrix(data);
-        else this.data = new Matrix([data]);
+        if (data instanceof Tensor) {
+            this.data = data.data;
+            _options.device = options && options.device ? options.device : data.device;
+        }
+        else if (data instanceof TensorBuffer) {
+            this.data = data;
+            _options.device = options && options.device ? options.device : data.device;
+        }
+        else if (data instanceof Array) this.data = Backend.CreateFromArray(_options.device, data);
+        else if (data instanceof Float32Array) this.data = Backend.CreateFromFloat32Array(_options.device, data);
+        // TODO: Temp
+        else if (data instanceof Matrix) {
+            this.data = MatrixToTensorBuffer(_options.device, data);
+        }
+        else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
-        // console.log(`Creating tensor requires_grad: ${_options.requires_grad} children_len ${_options._children.length}`)
-        // if (_options.requires_grad === false && _options._children.length === 0) {
-        //     throw Error("")
-        // }
-        // this.grad = Matrix.zeros(this.data.shape);
         this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
         this.device = _options.device;
         this.requires_grad = _options.requires_grad;
@@ -95,19 +121,66 @@ export class Tensor {
             }
         }
     }
+
+    // Helpers
+
+    // TODO: Should use strides and shape to do this
+    private static TensorFromNumber(value: number, shape: number[], options?: TensorOptions): Tensor {
+        const desiredElements = shape.reduce((acc, val) => acc * val, 1);
+        if (value === 0) return new Tensor(new Float32Array(desiredElements), options).reshape(shape);
+        return new Tensor(new Float32Array(desiredElements).fill(value), options).reshape(shape);
+    }
+
+    public static zeros(size: number[], options?: TensorOptions): Tensor {
+        return Tensor.TensorFromNumber(0, size, options);
+    }
+
+    public static ones(size: number[], options?: TensorOptions): Tensor {
+        return Tensor.TensorFromNumber(1, size, options);
+    }
+
+    public static full(size: number[], value: number, options?: TensorOptions): Tensor {
+        return Tensor.TensorFromNumber(value, size, options);
+    }
+
+    public static arange(start: number, stop: number, step: number = 1, options?: TensorOptions): Tensor {
+        let data: Float32Array = new Float32Array(Math.floor((stop - start) / step));
+        let s = 0;
+        for (let i = start; i < stop; i += step) {
+            data[s] = i;
+            s++;
+        }
+        return new Tensor(data, options);
+    }
+
+    public static rand(shape: number[], options?: TensorOptions): Tensor {
+        let data: Float32Array = new Float32Array(shape.reduce((prev, curr) => prev * curr));
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Random.Random();
+        }
+        return new Tensor(data, options).reshape(shape);
+    }
+
+    public static uniform(low: number, high: number, shape: number[], options?: TensorOptions): Tensor {
+        let data: Float32Array = new Float32Array(shape.reduce((prev, curr) => prev * curr));
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Random.RandomRange(low, high);
+        }
+        return new Tensor(data, options).reshape(shape);
+    }
     
     public add(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other));
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
         return new Operations.Add().forward(this, otherTensor);
     }
 
     public sub(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
         return this.add(otherTensor.mul(-1));
     }
 
     public mul(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
         return new Operations.Mul().forward(this, otherTensor);
     }
     
@@ -119,7 +192,7 @@ export class Tensor {
     public pow(other: Tensor | number): Tensor {
         // if ((other instanceof Tensor)) throw Error("Pow only supports scalars");
 
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other), {device: this.device, requires_grad: this.requires_grad});
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
 
         // const otherTensor: Tensor = new Tensor(Matrix.full(this.data.shape, other));
         return new Operations.Pow().forward(this, otherTensor);
@@ -134,7 +207,7 @@ export class Tensor {
     }
 
     public matmul(other: Tensor | number): Tensor {
-        const otherTensor: Tensor = other instanceof Tensor ? other : new Tensor(Matrix.full(this.data.shape, other));
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
         return new Operations.Matmul().forward(this, otherTensor);
     }
 
@@ -162,11 +235,11 @@ export class Tensor {
     }
 
     public reciprocal(): Tensor {
-        return new Tensor(Matrix.ones(this.data.shape), {device: this.device, requires_grad: this.requires_grad}).div(this);
+        return Tensor.ones(this.data.shape, {device: this.device, requires_grad: this.requires_grad}).div(this);
     }
 
     public sigmoid(): Tensor {
-        return new Tensor(Matrix.ones(this.data.shape), {device: this.device, requires_grad: this.requires_grad}).add((this.mul(-1)).exp()).reciprocal();
+        return Tensor.ones(this.data.shape, {device: this.device, requires_grad: this.requires_grad}).add((this.mul(-1)).exp()).reciprocal();
     }
 
     public tanh(): Tensor {
@@ -188,7 +261,7 @@ export class Tensor {
     }
 
     public __neg__() {
-        return this.mul(new Tensor(this.data.mul(-1)));
+        return this.mul(this.mul(-1));
     }
 
     public __radd__(other: Tensor) {

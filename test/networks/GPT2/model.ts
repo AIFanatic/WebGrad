@@ -1,4 +1,5 @@
 import { Module, nn, Random, Tensor, Matrix } from "../../../src";
+import { TensorBufferToMatrix } from "../../../src/Tensor";
 
 Random.SetRandomSeed(1337);
 
@@ -84,7 +85,7 @@ export class CausalSelfAttention extends Module {
         // calculate query, key, values for all heads in batch and move head forward to be the batch dim
 
         const c_attn_f = this.c_attn.forward(x);
-        const chunks = c_attn_f.data.split(this.n_embd);
+        const chunks = TensorBufferToMatrix(c_attn_f.data).split(this.n_embd);
         let [q, k, v] = [new Tensor(chunks[0]), new Tensor(chunks[1]), new Tensor(chunks[2])];
 
         k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
@@ -95,8 +96,8 @@ export class CausalSelfAttention extends Module {
         const t1 = new Tensor(1);
         let att = q.matmul(k.transpose(-2, -1)).mul(t1.div( Math.sqrt(k.shape[k.shape.length-1]) ))
         
-        const biasSliced = Matrix.slice(this.bias.data, [null, null, [0, T], [0, T]]);
-        let maskedAttn = att.data.masked_fill(biasSliced.equal(0), 0);
+        const biasSliced = Matrix.slice(TensorBufferToMatrix(this.bias.data), [null, null, [0, T], [0, T]]);
+        let maskedAttn = TensorBufferToMatrix(att.data).masked_fill(biasSliced.equal(0), 0);
 
         att = new Tensor(maskedAttn.getData());
         att = softmax(att, -1);
@@ -244,7 +245,7 @@ export class GPT extends Module {
 
             // pluck the logits at the final step and scale by desired temperature
             // TODO: Fix getdata
-            const logits_temp = Matrix.slice(logits.data, [null, [logits.shape[1]-1, logits.shape[1]], null]);
+            const logits_temp = Matrix.slice(TensorBufferToMatrix(logits.data), [null, [logits.shape[1]-1, logits.shape[1]], null]);
             logits = new Tensor(new Matrix(logits_temp.getData()).div(temperature)).reshape([1,65]);
             
             const probs = softmax(logits, -1);
@@ -252,7 +253,7 @@ export class GPT extends Module {
             let idx_next: Tensor
 
             if (do_sample) {
-                idx_next = new Tensor(Matrix.multinomial(probs.data, 1, true));
+                idx_next = new Tensor(Matrix.multinomial(TensorBufferToMatrix(probs.data), 1, true));
             }
             else {
                 // _, idx_next = torch.topk(probs, k=1, dim=-1)
@@ -260,7 +261,7 @@ export class GPT extends Module {
             }
 
             // # append sampled index to the running sequence and continue
-            idx = new Tensor(Matrix.cat([idx.data, idx_next.data], 1));
+            idx = new Tensor(Matrix.cat([TensorBufferToMatrix(idx.data), TensorBufferToMatrix(idx_next.data)], 1));
 
         }
         return idx;

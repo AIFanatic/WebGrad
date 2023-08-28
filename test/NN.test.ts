@@ -12,6 +12,7 @@ describe("Linear", () => {
     const input = new Tensor([[1,2], [3,4]]);
     const out = linear.forward(input);
 
+    console.log(`linear out ${out}`);
     assert(`${linear}` === `Linear(in_features=2, out_features=4)`);
     assert(equal(out, TensorFactory({data: [[-1.0668, -0.3854, -1.4619, 0.7911], [-2.2719, -0.2566, -3.6425, 1.5882]], grad: [[0,0,0,0],[0,0,0,0]]}), 1e-3));
 })

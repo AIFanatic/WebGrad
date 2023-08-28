@@ -1,6 +1,6 @@
 import { Matrix } from "../Matrix";
 import { Module } from "../Module";
-import { Tensor } from "../Tensor";
+import { Tensor, TensorBufferToMatrix } from "../Tensor";
 
 // TODO: Enable dropout when training
 export class Dropout extends Module {
@@ -13,15 +13,10 @@ export class Dropout extends Module {
         this.pScalar = p;
         this.p = new Tensor(p);
     }
-
-    // def dropout(self, p=0.5) -> Tensor:
-    //     if not Tensor.training: return self
-    //     mask = (Tensor.rand(*self.shape, requires_grad=False) >= p).cast(dtypes.bool)
-    //     return self * mask * (1/(1.0 - p))
         
     public forward(x: Tensor): Tensor {
         if (this.pScalar === 0) return x;
-        const mask = new Tensor(Matrix.rand(x.shape).gte(this.p.data.reshape(x.shape)));
+        const mask = new Tensor(Matrix.rand(x.shape).gte(TensorBufferToMatrix(this.p.data).reshape(x.shape)));
         return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
     }
 
@@ -30,6 +25,6 @@ export class Dropout extends Module {
     }
 
     public toString(): string {
-        return `Dropout(p=${this.p.data.data[0].toFixed(2)})`;
+        return `Dropout(p=${this.pScalar.toFixed(2)})`;
     }
 }

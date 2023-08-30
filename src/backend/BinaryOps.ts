@@ -1,4 +1,3 @@
-import { CreationLinks } from "../Tensor";
 import { Device } from "./Backend";
 import { MovementOp } from "./MovementOps";
 import { TensorBuffer } from "./TensorBuffer";

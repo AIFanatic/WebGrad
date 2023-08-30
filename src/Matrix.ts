@@ -351,7 +351,10 @@ export class Matrix {
         return true;
     }
 
-    public static broadcast(x: Matrix, y: Matrix): [Matrix, Matrix] {
+    public static broadcast(x: Matrix | number, y: Matrix | number): [Matrix, Matrix] {
+        if (!(x instanceof Matrix)) x = new Matrix([x]);
+        if (!(y instanceof Matrix)) y = new Matrix([y]);
+        
         if (Matrix.equalArrays(x.shape, y.shape)) return [x, y];
 
         // Calculate the final shape after broadcasting
@@ -363,6 +366,10 @@ export class Matrix {
         finalShape = finalShape.reverse(); // reverse because we filled the array from the end
 
         return [x.expand(finalShape), y.expand(finalShape)];
+    }
+
+    public broadcast(other: Matrix | number): [Matrix, Matrix] {
+        return Matrix.broadcast(this, other);
     }
 
     public broadcast_to(shape: number[]): Matrix {
@@ -493,67 +500,50 @@ export class Matrix {
         return Matrix.MatrixFromNumber(value, size);
     }
 
-    private static binary_op(m1: Matrix | number, m2: Matrix | number, op: BinaryOp): Matrix {
-        if (!(m1 instanceof Matrix) && !(m2 instanceof Matrix)) {
-            m1 = new Matrix([m1]);
-            m2 = new Matrix([m2]);
-        }
-
-        let _m1 = m1 instanceof Matrix ? m1 : new Matrix([m1]);
-        let _m2 = m2 instanceof Matrix ? m2 : new Matrix([m2]);
-
-        let [_m1b, _m2b] = Matrix.broadcast(_m1, _m2);
-
-        const _m1bShape = _m1b.shape.slice();
-        // Reshape to 2d
-        const s = Matrix.reshape1d(_m1b.shape);
-        // _m1b = new Matrix(_m1b.data, s);
-        // _m2b = new Matrix(_m2b.data, s);
-        _m1b = _m1b.reshape(s);
-        _m2b = _m2b.reshape(s);
-
-        // console.log(`_m1b ${_m1b.shape} ${_m1b.strides}`);
-        // console.log(`_m2b ${_m2b.shape} ${_m2b.strides}`);
-
-        let newData = new Float32Array(_m1b.shape.reduce((p, c) => p * c));
-        // console.log("ndl", newData.length)
+    private static binary_op(m1: Matrix, m2: Matrix, op: BinaryOp): Matrix {
+        let newData = new Float32Array(m1.shape.reduce((p, c) => p * c));
 
         // Normal
         for (let i = 0; i < newData.length; i++) {
 
             let value = 0
-            if (op == BinaryOp.ADD) value = _m1b.get1D(i) + _m2b.get1D(i);
-            else if (op == BinaryOp.SUB) value = _m1b.get1D(i) - _m2b.get1D(i);
-            else if (op == BinaryOp.MUL) value = _m1b.get1D(i) * _m2b.get1D(i);
-            else if (op == BinaryOp.DIV) value = _m1b.get1D(i) / _m2b.get1D(i);
-            else if (op == BinaryOp.POW) value = _m1b.get1D(i) ** _m2b.get1D(i);
+            if (op == BinaryOp.ADD) value = m1.get(i) + m2.get(i);
+            else if (op == BinaryOp.SUB) value = m1.get(i) - m2.get(i);
+            else if (op == BinaryOp.MUL) value = m1.get(i) * m2.get(i);
+            else if (op == BinaryOp.DIV) value = m1.get(i) / m2.get(i);
+            else if (op == BinaryOp.POW) value = m1.get(i) ** m2.get(i);
 
             newData[i] = isNaN(value) ? 0 : value;
         }
 
         // console.timeEnd(`binary_op ${op}`);
 
-        return new Matrix(newData, _m1bShape);
+        return new Matrix(newData, m1.shape);
     }
 
     public static add(m1: Matrix | number, m2: Matrix | number): Matrix {
-        return Matrix.binary_op(m1, m2, BinaryOp.ADD);
+        // return Matrix.binary_op(m1, m2, BinaryOp.ADD);
+        return Matrix.binary_op(...Matrix.broadcast(m1, m2), BinaryOp.ADD);
     }
 
     public static sub(m1: Matrix | number, m2: Matrix | number): Matrix {
-        return Matrix.binary_op(m1, m2, BinaryOp.SUB);
+        // return Matrix.binary_op(m1, m2, BinaryOp.SUB);
+        return Matrix.binary_op(...Matrix.broadcast(m1, m2), BinaryOp.SUB);
     }
 
     public static mul(m1: Matrix | number, m2: Matrix | number): Matrix {
-        return Matrix.binary_op(m1, m2, BinaryOp.MUL);
+        // return Matrix.binary_op(m1, m2, BinaryOp.MUL);
+        return Matrix.binary_op(...Matrix.broadcast(m1, m2), BinaryOp.MUL);
     }
 
     public static div(m1: Matrix | number, m2: Matrix | number): Matrix {
-        return Matrix.binary_op(m1, m2, BinaryOp.DIV);
+        // return Matrix.binary_op(m1, m2, BinaryOp.DIV);
+        return Matrix.binary_op(...Matrix.broadcast(m1, m2), BinaryOp.DIV);
     }
 
     public static pow(m1: Matrix | number, m2: Matrix | number): Matrix {
-        return Matrix.binary_op(m1, m2, BinaryOp.POW);
+        // return Matrix.binary_op(m1, m2, BinaryOp.POW);
+        return Matrix.binary_op(...Matrix.broadcast(m1, m2), BinaryOp.POW);
     }
 
     public static dot(m1: Matrix, m2: Matrix): Matrix {
@@ -780,11 +770,17 @@ export class Matrix {
 
 
     // Fillers
-    public add(m: Matrix | number): Matrix { return Matrix.add(this, m) };
-    public sub(m: Matrix | number): Matrix { return Matrix.sub(this, m) };
-    public mul(m: Matrix | number): Matrix { return Matrix.mul(this, m) };
-    public div(m: Matrix | number): Matrix { return Matrix.div(this, m) };
-    public pow(m: Matrix | number): Matrix { return Matrix.pow(this, m) };
+    public add(m: Matrix | number): Matrix { return Matrix.add(this, m); };
+    public sub(m: Matrix | number): Matrix { return Matrix.sub(this, m); };
+    public mul(m: Matrix | number): Matrix { return Matrix.mul(this, m); };
+    public div(m: Matrix | number): Matrix { return Matrix.div(this, m); };
+    public pow(m: Matrix | number): Matrix { return Matrix.pow(this, m); };
+
+    // public add(m: Matrix | number): Matrix { return Matrix.add(this, m) };
+    // public sub(m: Matrix | number): Matrix { return Matrix.sub(this, m) };
+    // public mul(m: Matrix | number): Matrix { return Matrix.mul(this, m) };
+    // public div(m: Matrix | number): Matrix { return Matrix.div(this, m) };
+    // public pow(m: Matrix | number): Matrix { return Matrix.pow(this, m) };
     public exp(): Matrix { return Matrix.exp(this) };
     public dot(m: Matrix): Matrix { return Matrix.dot(this, m) };
     public split(split_sizes: number | number[], dim: null | number = null): Matrix[] { return Matrix.split(this, split_sizes, dim) };

@@ -2,6 +2,7 @@ import { Operations, Random } from ".";
 import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
 import { Backend, Device } from "./backend/Backend";
+import { MovementOp } from "./backend/MovementOps";
 import { TensorBuffer } from "./backend/TensorBuffer";
 
 
@@ -9,7 +10,8 @@ import { TensorBuffer } from "./backend/TensorBuffer";
 // TODO: Temp
 export function TensorBufferToMatrix(tensorBuffer: TensorBuffer): Matrix {
     // return new Matrix(tensorBuffer.getData(), tensorBuffer.shape, tensorBuffer.strides, tensorBuffer.offset);
-    return new Matrix(tensorBuffer.getData());
+    return new Matrix(tensorBuffer.data, tensorBuffer.shape, tensorBuffer.strides, tensorBuffer.offset);
+    // return new Matrix(tensorBuffer.getData());
 }
 
 export function MatrixToTensorBuffer(device: Device, matrix: Matrix): TensorBuffer {
@@ -65,6 +67,9 @@ export class Tensor {
         if (data instanceof Tensor) {
             this.data = data.data;
             _options.device = options && options.device ? options.device : data.device;
+
+            // _options._op = options && options._op !== null ? options._op : data._op;
+            // _options._children = options && options._children && options._children.length !== 0 ? options._children : data._children;
         }
         else if (data instanceof TensorBuffer) {
             this.data = data;
@@ -78,7 +83,8 @@ export class Tensor {
         }
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
-        this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
+        this.grad = Matrix.zeros(this.shape);
+        // this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
         this.device = _options.device;
         this.requires_grad = _options.requires_grad;
         this._op = _options._op;
@@ -169,9 +175,44 @@ export class Tensor {
         return new Tensor(data, options).reshape(shape);
     }
     
+    // Movement ops
+    public get T(): Tensor { return this.permute(); }
+    // public expand(shape: number[]): Tensor { return new Tensor(MovementOp.expand(this.data, shape), {device: this.device, requires_grad: this.requires_grad}); };
+    public expand(shape: number[]): Tensor { return new Operations.Expand().forward(this, shape); }
+
+    private static equalArrays(first: number[], second: number[]): boolean {
+        if (first.length != second.length) return false;
+        for (let i = 0; i < first.length; i++) {
+            if (first[i] !== second[i]) return false;
+        }
+        return true;
+    }
+
+    public broadcast(other: Tensor): [Tensor, Tensor] {
+        const [x,y] = [this, other];
+        if (Tensor.equalArrays(x.shape, y.shape)) return [x, y];
+
+        // Calculate the final shape after broadcasting
+        let finalShape: number[] = [];
+        let maxLength = Math.max(x.shape.length, y.shape.length);
+        for (let i = 0; i < maxLength; i++) {
+            finalShape.push(Math.max(x.shape[x.shape.length - i - 1] || 1, y.shape[y.shape.length - i - 1] || 1));
+        }
+        finalShape = finalShape.reverse(); // reverse because we filled the array from the end
+
+        // return [
+        //     new Tensor(x.expand(finalShape), {device: this.device, requires_grad: this.requires_grad}),
+        //     new Tensor(y.expand(finalShape), {device: this.device, requires_grad: this.requires_grad})
+        // ]
+        return [
+            x.expand(finalShape),
+            y.expand(finalShape)
+        ]
+    }
+
     public add(other: Tensor | number): Tensor {
         const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
-        return new Operations.Add().forward(this, otherTensor);
+        return new Operations.Add().forward(...this.broadcast(otherTensor));
     }
 
     public sub(other: Tensor | number): Tensor {
@@ -181,7 +222,7 @@ export class Tensor {
 
     public mul(other: Tensor | number): Tensor {
         const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
-        return new Operations.Mul().forward(this, otherTensor);
+        return new Operations.Mul().forward(...this.broadcast(otherTensor));
     }
     
     public div(other: Tensor | number) {
@@ -190,12 +231,8 @@ export class Tensor {
     }
 
     public pow(other: Tensor | number): Tensor {
-        // if ((other instanceof Tensor)) throw Error("Pow only supports scalars");
-
         const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
-
-        // const otherTensor: Tensor = new Tensor(Matrix.full(this.data.shape, other));
-        return new Operations.Pow().forward(this, otherTensor);
+        return new Operations.Pow().forward(...this.broadcast(otherTensor));
     }
 
     public sqrt(): Tensor {
@@ -204,6 +241,22 @@ export class Tensor {
 
     public rsqrt(): Tensor {
         return this.pow(-0.5);
+    }
+
+    public _matmul(other: Tensor | number): Tensor {
+        const [m1, m2] = [this, other instanceof Tensor ? other : Tensor.full(this.shape, other)];
+        const x = m1.reshape([...m1.shape.slice(0, m1.shape.length - 1), 1, ...m1.shape.slice(m1.shape.length - 1, m1.shape.length)]);
+        let w = m2.reshape([...m2.shape.slice(0, m2.shape.length - 2), 1, ...m2.shape.slice(m2.shape.length - 2, m2.shape.length - 1), ...m2.shape.slice(m2.shape.length - 1, m2.shape.length)]);
+        w = w.transpose(-1, -2);
+
+        let r = x.mul(w);
+        r = r.sum(-1);
+
+        if (m1.shape.length == 1) {
+            r = r.reshape([...r.shape.slice(0, r.shape.length - 3), ...r.shape.slice(r.shape.length - 2, r.shape.length - 1)]);
+        }
+
+        return r;
     }
 
     public matmul(other: Tensor | number): Tensor {
@@ -243,9 +296,10 @@ export class Tensor {
     }
 
     public tanh(): Tensor {
+        const one = new Tensor(1, {device: this.device, requires_grad: this.requires_grad});
         const two1 = new Tensor(2, {device: this.device, requires_grad: this.requires_grad});
         const two2 = new Tensor(2, {device: this.device, requires_grad: this.requires_grad});
-        return two1.mul((two2.mul(this).sigmoid())).sub(1);
+        return two1.mul((two2.mul(this).sigmoid())).sub(one);
     }
 
     public permute(axes: number[] | null = null): Tensor {
@@ -253,7 +307,7 @@ export class Tensor {
     }
 
     public transpose(dim0: number, dim1: number): Tensor {
-        return new Operations.Tranpose().forward(this, dim0, dim1);
+        return new Operations.Transpose().forward(this, dim0, dim1);
     }
 
     public zero_grad() {

@@ -90,12 +90,12 @@ describe("3 dense layers", () => {
         for (let p of model.parameters()) {
             const w_sum = p.mul(p).sum();
             const p_shape_prod = Matrix.prod(new Matrix(p.data.shape));
-            const div = w_sum.div(new Tensor(p_shape_prod));
+            const div = w_sum.div(new Tensor(p_shape_prod, {requires_grad: true}));
             reg_loss = reg_loss.add(div);
         }
 
         
-        const alpha = new Tensor(1e-4);
+        const alpha = new Tensor(1e-4, {requires_grad: true});
         const total_loss = data_loss.mean().add(reg_loss.mul(alpha));
 
         return total_loss;

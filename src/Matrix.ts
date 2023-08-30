@@ -776,11 +776,6 @@ export class Matrix {
     public div(m: Matrix | number): Matrix { return Matrix.div(this, m); };
     public pow(m: Matrix | number): Matrix { return Matrix.pow(this, m); };
 
-    // public add(m: Matrix | number): Matrix { return Matrix.add(this, m) };
-    // public sub(m: Matrix | number): Matrix { return Matrix.sub(this, m) };
-    // public mul(m: Matrix | number): Matrix { return Matrix.mul(this, m) };
-    // public div(m: Matrix | number): Matrix { return Matrix.div(this, m) };
-    // public pow(m: Matrix | number): Matrix { return Matrix.pow(this, m) };
     public exp(): Matrix { return Matrix.exp(this) };
     public dot(m: Matrix): Matrix { return Matrix.dot(this, m) };
     public split(split_sizes: number | number[], dim: null | number = null): Matrix[] { return Matrix.split(this, split_sizes, dim) };

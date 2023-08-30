@@ -2,7 +2,6 @@ import { Operations, Random } from ".";
 import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
 import { Backend, Device } from "./backend/Backend";
-import { MovementOp } from "./backend/MovementOps";
 import { TensorBuffer } from "./backend/TensorBuffer";
 
 

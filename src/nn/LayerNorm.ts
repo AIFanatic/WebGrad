@@ -1,5 +1,4 @@
 import { Module } from "../Module";
-import { Matrix } from "../Matrix";
 import { Tensor } from "../Tensor";
 
 export class LayerNorm extends Module {
@@ -12,8 +11,8 @@ export class LayerNorm extends Module {
         super();
         this.eps = eps;
         this.elementwise_affine = elementwise_affine;
-        this.weight = new Tensor(Matrix.ones(normalized_shape), {requires_grad: true}); // learnable weights
-        this.bias = elementwise_affine ? new Tensor(Matrix.zeros(normalized_shape), {requires_grad: true}) : null; // learnable bias
+        this.weight = Tensor.ones(normalized_shape, {requires_grad: true}); // learnable weights
+        this.bias = elementwise_affine ? Tensor.zeros(normalized_shape, {requires_grad: true}) : null; // learnable bias
     }
 
     private numel(tensor: Tensor): number {

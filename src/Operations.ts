@@ -215,3 +215,30 @@ export class Transpose extends Operation {
         ];
     }
 }
+
+export class Maximum extends Operation {
+    private x: Tensor;
+    private y: Tensor;
+    public forward(x: Tensor, y: Tensor): Tensor {
+        this.x = x;
+        this.y = y;
+        return new Tensor(BinaryOp.maximum(x.data, y.data), {_children: [x, y], _op: this});
+    }
+
+    public backward(grad: Matrix): [Matrix, Matrix] {
+        return [
+            TensorBufferToMatrix(this.x.gte(this.y).data),
+            TensorBufferToMatrix(this.y.gt(this.x).data)
+        ];
+    }
+}
+
+export class Equal extends Operation {
+    public forward(x: Tensor, y: Tensor): Tensor {
+        return new Tensor(BinaryOp.equal(x.data, y.data), {_children: [x, y], _op: this});
+    }
+
+    public backward(grad: Matrix): [Matrix, Matrix] {
+        return [grad, null];
+    }
+}

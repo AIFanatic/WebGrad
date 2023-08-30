@@ -1,6 +1,5 @@
-import { Matrix } from "../Matrix";
 import { Module } from "../Module";
-import { Tensor, TensorBufferToMatrix } from "../Tensor";
+import { Tensor } from "../Tensor";
 
 // TODO: Enable dropout when training
 export class Dropout extends Module {
@@ -16,7 +15,7 @@ export class Dropout extends Module {
         
     public forward(x: Tensor): Tensor {
         if (this.pScalar === 0) return x;
-        const mask = new Tensor(Matrix.rand(x.shape).gte(TensorBufferToMatrix(this.p.data).reshape(x.shape)));
+        const mask = Tensor.rand(x.shape).gte(this.p).reshape(x.shape);
         return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
     }
 

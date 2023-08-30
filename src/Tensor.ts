@@ -346,4 +346,47 @@ export class Tensor {
     public copy(): Tensor {
         return new Tensor(this.data.copy());
     }
+
+
+
+
+
+    // New ops
+    public maximum(other: Tensor | number): Tensor {
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device});
+        return new Operations.Maximum().forward(...this.broadcast(otherTensor));
+    }
+
+    public eq(other: Tensor | number) {
+        const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device});
+        return new Operations.Equal().forward(...this.broadcast(otherTensor));
+    }
+
+    public ne(other: Tensor | number) {
+        const one = new Tensor([1], {device: this.device});
+        return one.sub(this.eq(other));
+    }
+
+    public gte(other: Tensor | number): Tensor { return this.maximum(other).eq(this); }
+    public lte(other: Tensor | number): Tensor { return this.maximum(other).eq(other); }
+
+    public gt(other: Tensor | number): Tensor {
+        const one = new Tensor([1], {device: this.device});
+        return one.sub(this.lte(other));
+    }
+
+    public lt(other: Tensor | number): Tensor {
+        const one = new Tensor([1], {device: this.device});
+        return one.sub(this.gte(other));
+    }
+
+    public static where(condition: Tensor, x: Tensor, y: Tensor): Tensor {
+        const one = new Tensor([1], {device: x.device});
+        return condition.mul(x).add(one.sub(condition).mul(y));
+    }
+
+    public unsqueeze(dim: number): Tensor {
+        if (dim < 0) dim = this.shape.length + dim + 1;
+        return this.reshape([...this.shape.slice(0, dim), 1, ...this.shape.slice(dim)]);
+    }
 }

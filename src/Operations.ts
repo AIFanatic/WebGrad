@@ -10,17 +10,6 @@ export class Operation {
     backward(grad: Matrix): [Matrix, Matrix] { throw Error("Not implemented") };
 }
 
-function get_repeat_axis(left_shape: number[], right_shape: number[]): [number, number] {
-    const len1 = left_shape.length;
-    const len2 = right_shape.length;
-    const left_not_repeat = len1 - len2;
-    const repeat_axis = Matrix.arange(0, Math.abs(len1 - len2), 1);
-
-    if (repeat_axis.data.length > 1) throw Error("Multiple axis repeated, sum wont work");
-    
-    return [left_not_repeat, repeat_axis.data[0]];
-}
-
 export class Add extends Operation {
     private x: Tensor;
     private y: Tensor;
@@ -31,13 +20,7 @@ export class Add extends Operation {
     }
 
     public backward(grad: Matrix): [Matrix, Matrix] {
-        const [self_not_repeat, self_repeat_axis] = get_repeat_axis(this.x.grad.shape, grad.shape);
-        const [other_not_repeat, other_repeat_axis] = get_repeat_axis(this.y.grad.shape, grad.shape);
-    
-        return [
-            self_not_repeat < 0 ? grad.sum(self_repeat_axis) : grad,
-            other_not_repeat < 0 ? grad.sum(other_repeat_axis) : grad
-        ]
+        return [grad, grad];
     }
 }
 

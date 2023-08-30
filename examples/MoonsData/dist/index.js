@@ -1,5 +1,5 @@
 // src/index.ts
-import { Tensor, Module, nn } from "micrograd-ts";
+import { Tensor, Module, nn, MatrixToTensorBuffer, TensorBufferToMatrix } from "micrograd-ts";
 import { Random } from "micrograd-ts";
 
 // src/GraphUtils.ts
@@ -186,7 +186,7 @@ var MoonsDemo = class {
       loss.backward();
       const learning_rate = 0.5;
       for (let p of this.model.parameters()) {
-        p.data = p.data.sub(p.grad.mul(learning_rate));
+        p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(p.grad.mul(0.5)));
       }
       this.drawPredections();
       this.updateElements(k, loss);

@@ -1,4 +1,4 @@
-import { Tensor, Module, nn } from "micrograd-ts";
+import { Tensor, Module, nn, MatrixToTensorBuffer, TensorBufferToMatrix } from "micrograd-ts";
 import { Random } from "micrograd-ts";
 
 import { GraphUtils } from './GraphUtils.js';
@@ -181,7 +181,8 @@ export class MoonsDemo {
 
             const learning_rate = 0.5;
             for (let p of this.model.parameters()) {
-                p.data = p.data.sub(p.grad.mul(learning_rate));
+                // p.data = p.data.sub(p.grad.mul(learning_rate));
+                p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(p.grad.mul(0.5)));
                 // p.assign(p.sub(p.grad.mul(learning_rate)));
 
                 // p.data = p.sub(p.grad.mul(learning_rate)).data;

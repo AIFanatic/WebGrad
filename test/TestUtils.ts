@@ -1,5 +1,6 @@
 import { Matrix } from "../src/Matrix";
 import { Tensor } from "../src/Tensor";
+import { TensorBuffer } from "../src/backend/TensorBuffer";
 
 export async function describe(name: string, func: Function) {
     const colors = {"red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m"};
@@ -22,38 +23,38 @@ export function assert(condition: boolean) {
     if (!condition) throw Error("Ups, condition is false");
 }
 
-// function equalTensorBuffer(a: TensorBuffer, b: TensorBuffer, EPS: number = 1e-5): boolean {
-//     if (a.shape.length !== b.shape.length ) {
-//         console.log(`Shape of a (${a.shape}) doesn't match shape of b (${b.shape})`);
-//         return false;
-//     }
+function equalTensorBuffer(a: TensorBuffer, b: TensorBuffer, EPS: number = 1e-5): boolean {
+    if (a.shape.length !== b.shape.length ) {
+        console.log(`Shape of a (${a.shape}) doesn't match shape of b (${b.shape})`);
+        return false;
+    }
 
-//     for (let i = 0; i < a.shape.length; i++) {
-//         if (a.shape[i] !== b.shape[i]) {
-//             console.log(`Shape of a (${a.shape}) doesn't match shape of b (${b.shape})`);
-//             return false;
-//         }
-//     }
+    for (let i = 0; i < a.shape.length; i++) {
+        if (a.shape[i] !== b.shape[i]) {
+            console.log(`Shape of a (${a.shape}) doesn't match shape of b (${b.shape})`);
+            return false;
+        }
+    }
 
-//     for (let i = 0; i < a.shape.reduce((p, c) => p * c); i++) {
-//         const aV = a.get(i);
-//         const bV = b.get(i);
-//         if (aV === undefined || bV === undefined) {
-//             console.log(`Expected values but got a[${i}]=${aV} and b[${i}]=${bV}`);
-//             return false;
-//         }
-//         else if (aV === null || bV === null) {
-//             console.log(`Expected values but got a[${i}]=${aV} and b[${i}]=${bV}`);
-//             return false;
-//         }
-//         if (Math.abs(aV - bV) > EPS) {
-//             console.log(`Data of a (${aV}) doesn't match data of b (${bV})`);
-//             return false;
-//         }
-//     }
+    for (let i = 0; i < a.shape.reduce((p, c) => p * c); i++) {
+        const aV = a.get(i);
+        const bV = b.get(i);
+        if (aV === undefined || bV === undefined) {
+            console.log(`Expected values but got a[${i}]=${aV} and b[${i}]=${bV}`);
+            return false;
+        }
+        else if (aV === null || bV === null) {
+            console.log(`Expected values but got a[${i}]=${aV} and b[${i}]=${bV}`);
+            return false;
+        }
+        if (Math.abs(aV - bV) > EPS) {
+            console.log(`Data of a (${aV}) doesn't match data of b (${bV})`);
+            return false;
+        }
+    }
     
-//     return true;
-// }
+    return true;
+}
 
 function equalMatrix(a: Matrix, b: Matrix, EPS: number = 1e-5): boolean {
     if (a.shape.length !== b.shape.length ) {
@@ -90,7 +91,8 @@ function equalMatrix(a: Matrix, b: Matrix, EPS: number = 1e-5): boolean {
 
 function equalTensor(a: Tensor, b: Tensor, EPS: number = 1e-5): boolean {
     const equalData = equalMatrix(a.data, b.data, EPS);
-    const equalGrads = a.grad && b.grad ? equalFloat32Array(a.grad.data, b.grad.data, EPS) : true;
+    // const equalGrads = a.grad && b.grad ? equalFloat32Array(a.grad.data, b.grad.data, EPS) : true;
+    const equalGrads = a.grad && b.grad ? equalTensorBuffer(a.grad, b.grad, EPS) : true;
     return equalData && equalGrads;
 }
 

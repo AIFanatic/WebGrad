@@ -1,13 +1,13 @@
-import { Matrix } from "./Matrix";
-import { MatrixToTensorBuffer, Tensor, TensorBufferToMatrix } from "./Tensor";
+import { Tensor } from "./Tensor";
 import { BinaryOp } from "./backend/BinaryOps";
 import { MovementOp } from "./backend/MovementOps";
 import { ReduceOp } from "./backend/ReduceOps";
+import { TensorBuffer } from "./backend/TensorBuffer";
 import { UnaryOp } from "./backend/UnaryOps";
 
 export class Operation {
     forward(...args): Tensor { throw Error("Not implemented") };
-    backward(grad: Matrix): [Matrix, Matrix] { throw Error("Not implemented") };
+    backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] { throw Error("Not implemented") };
 }
 
 export class Add extends Operation {
@@ -19,7 +19,7 @@ export class Add extends Operation {
         return new Tensor(BinaryOp.add(x.data, y.data), {_children: [x, y], _op: this}); // Fails
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [grad, grad];
     }
 }
@@ -35,8 +35,11 @@ export class Mul extends Operation {
         return new Tensor(BinaryOp.mul(x.data, y.data), {_children: [x, y], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
-        return [TensorBufferToMatrix(this.y.data).mul(grad), TensorBufferToMatrix(this.x.data).mul(grad)];
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
+        return [
+            BinaryOp.mul(this.y.data, grad),
+            BinaryOp.mul(this.x.data, grad),
+        ];
     }
 }
 
@@ -50,11 +53,11 @@ export class Pow extends Operation {
         return new Tensor(BinaryOp.pow(x.data, y.data), {_children: [x], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
-        const a = TensorBufferToMatrix(this.y.data).sub(1);
-        const b = TensorBufferToMatrix(this.x.data).pow(a);
-        const c = TensorBufferToMatrix(this.y.data).mul(b);
-        const d = c.mul(grad);
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
+        const a = BinaryOp.sub(this.y.data, new Tensor([1]).data);
+        const b = BinaryOp.pow(this.x.data, a);
+        const c = BinaryOp.mul(this.y.data, b);
+        const d = BinaryOp.mul(c, grad);
         
         return [d, null];
     }
@@ -70,10 +73,10 @@ export class Matmul extends Operation {
         return new Tensor(x._matmul(y), {_children: [x, y], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(new Tensor(grad)._matmul(this.y.T).data),
-            TensorBufferToMatrix(this.x.T._matmul(new Tensor(grad)).data),
+            new Tensor(grad)._matmul(this.y.T).data,
+            this.x.T._matmul(new Tensor(grad)).data
         ];
     }
 }
@@ -86,9 +89,9 @@ export class Sum extends Operation {
         return new Tensor(ReduceOp.sum(x.data, axis, keepdims), {_children: [x], _op: this}); // Fails
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(MovementOp.expand(MatrixToTensorBuffer(0, grad), this.shape)),
+            MovementOp.expand(grad, this.shape),
             null
         ];
     }
@@ -101,9 +104,9 @@ export class Exp extends Operation {
         return this.out;
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            grad.mul(TensorBufferToMatrix(this.out.data)),
+            BinaryOp.mul(grad, this.out.data),
             null
         ];
     }
@@ -112,12 +115,15 @@ export class Exp extends Operation {
 export class Relu extends Operation {
     private out: Tensor;
     public forward(x: Tensor): Tensor {
-        this.out = new Tensor(Matrix.maximum(Matrix.zeros(x.shape), TensorBufferToMatrix(x.data)), {_children: [x], _op: this});
+        this.out = new Tensor(Tensor.zeros(x.shape).maximum(x), {_children: [x], _op: this});
         return this.out;
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
-        return [Matrix.where(TensorBufferToMatrix(this.out.data).gt(0), grad, Matrix.zeros(this.out.data.shape)), null];
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
+        return [
+            Tensor.where(this.out.gt(0), new Tensor(grad), Tensor.zeros(this.out.shape)).data,
+            null
+        ];
     }
 }
 
@@ -129,7 +135,7 @@ export class Expand extends Operation {
         return new Tensor(MovementOp.expand(x.data, shape), {_children: [x], _op: this});
     }
 
-    public backward(grad1: Matrix): [Matrix, Matrix] {
+    public backward(grad1: TensorBuffer): [TensorBuffer, TensorBuffer] {
 
         let gradTensor = new Tensor(grad1);
 
@@ -163,7 +169,7 @@ export class Expand extends Operation {
         }
 
         return [
-            TensorBufferToMatrix(gradTensor.data),
+            gradTensor.data,
             null
         ];
     }
@@ -176,9 +182,9 @@ export class Reshape extends Operation {
         return new Tensor(MovementOp.reshape(x.data, shape), {_children: [x], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(MovementOp.reshape(MatrixToTensorBuffer(0, grad), this.shape)),
+            MovementOp.reshape(grad, this.shape),
             null
         ];
     }
@@ -191,9 +197,9 @@ export class Permute extends Operation {
         return new Tensor(MovementOp.permute(x.data, axes), {_children: [x], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(MovementOp.permute(MatrixToTensorBuffer(0, grad), this.axes)),
+            MovementOp.permute(grad, this.axes),
             null
         ];
     }
@@ -208,9 +214,9 @@ export class Transpose extends Operation {
         return new Tensor(MovementOp.transpose(x.data, dim0, dim1), {_children: [x], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(MovementOp.transpose(MatrixToTensorBuffer(0, grad), this.dim0, this.dim1)),
+            MovementOp.transpose(grad, this.dim0, this.dim1),
             null
         ];
     }
@@ -225,10 +231,10 @@ export class Maximum extends Operation {
         return new Tensor(BinaryOp.maximum(x.data, y.data), {_children: [x, y], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            TensorBufferToMatrix(this.x.gte(this.y).data),
-            TensorBufferToMatrix(this.y.gt(this.x).data)
+            this.x.gte(this.y).data,
+            this.y.gt(this.x).data
         ];
     }
 }
@@ -238,7 +244,7 @@ export class Equal extends Operation {
         return new Tensor(BinaryOp.equal(x.data, y.data), {_children: [x, y], _op: this});
     }
 
-    public backward(grad: Matrix): [Matrix, Matrix] {
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [grad, null];
     }
 }

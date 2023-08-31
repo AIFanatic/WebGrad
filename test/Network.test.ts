@@ -1,11 +1,10 @@
 import { describe, assert, equal, TensorFactory } from "./TestUtils";
 
-import { MatrixToTensorBuffer, Tensor, TensorBufferToMatrix } from "../src/Tensor";
+import { Tensor } from "../src/Tensor";
 
 import { Module } from "../src/Module";
-import { Matrix, nn } from "../src/";
+import { nn } from "../src/";
 import { Random } from "../src/Random";
-
 
 describe("1 dense layer", () => {
     Random.SetRandomSeed(1337);
@@ -47,7 +46,7 @@ describe("1 dense layer", () => {
 
     const learning_rate = 0.01;
     for (let p of model.parameters()) {
-        p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(p.grad.mul(learning_rate)));
+        p.data = p.sub(new Tensor(p.grad).mul(learning_rate)).data;
     }
 
     assert(equal(loss, TensorFactory({data: [0.40608614805], grad: [1]})));
@@ -89,7 +88,7 @@ describe("3 dense layers", () => {
         let reg_loss = new Tensor([0], {requires_grad: true});
         for (let p of model.parameters()) {
             const w_sum = p.mul(p).sum();
-            const p_shape_prod = Matrix.prod(new Matrix(p.data.shape));
+            const p_shape_prod = p.data.shape.reduce((p, c) => p * c);
             const div = w_sum.div(new Tensor(p_shape_prod, {requires_grad: true}));
             reg_loss = reg_loss.add(div);
         }
@@ -133,9 +132,9 @@ describe("3 dense layers", () => {
         model.zero_grad();
         total_loss.backward();
 
+        const learning_rate = 0.1;
         for (let p of model.parameters()) {
-            const learning_rate = Matrix.full(p.grad.shape, 0.1);
-            p.data = MatrixToTensorBuffer(0, TensorBufferToMatrix(p.data).sub(learning_rate.mul(p.grad)));
+            p.data = p.sub(new Tensor(p.grad).mul(learning_rate)).data;
         }
 
         const total_loss2 = get_loss(model, new Tensor(X), new Tensor(Y.reshape([Y.shape[0], 1])));

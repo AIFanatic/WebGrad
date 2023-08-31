@@ -2,6 +2,7 @@ import { Operations, Random } from ".";
 import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
 import { Backend, Device } from "./backend/Backend";
+import { BinaryOp } from "./backend/BinaryOps";
 import { TensorBuffer } from "./backend/TensorBuffer";
 
 
@@ -40,7 +41,7 @@ const DefaultTensorOptions: TensorOptions = {
 
 export class Tensor {
     public data: TensorBuffer;
-    public grad: Matrix;
+    public grad: TensorBuffer;
     public _children: Tensor[];
     public _prev: Set<Tensor>;
     public _op: Operation;
@@ -82,7 +83,7 @@ export class Tensor {
         }
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
-        this.grad = Matrix.zeros(this.shape);
+        this.grad = Backend.CreateFromFloat32Array(0, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
         // this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
         this.device = _options.device;
         this.requires_grad = _options.requires_grad;
@@ -108,7 +109,8 @@ export class Tensor {
 
         build_topo(this);
 
-        this.grad = Matrix.ones(this.data.shape);
+        // this.grad = Tensor.ones(this.data.shape).data;
+        this.grad = Backend.CreateFromFloat32Array(0, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
 
         for (let v of topo.reverse()) {
             if (v._op === null) continue;
@@ -117,7 +119,8 @@ export class Tensor {
                 for (let i = 0; i < grads.length; i++) {
                     if (grads[i] !== null) {
                         if (v._children[i].grad) {
-                            v._children[i].grad = v._children[i].grad.add(grads[i]); // accumulate gradients
+                            // v._children[i].grad = v._children[i].grad.add(grads[i]); // accumulate gradients
+                            v._children[i].grad = BinaryOp.add(v._children[i].grad, grads[i]); // accumulate gradients
                         } else {
                             v._children[i].grad = grads[i];
                         }
@@ -310,7 +313,7 @@ export class Tensor {
     }
 
     public zero_grad() {
-        this.grad = Matrix.zeros(this.data.shape);
+        this.grad = Tensor.zeros(this.data.shape).data;
     }
 
     public __neg__() {

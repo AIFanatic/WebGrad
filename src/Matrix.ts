@@ -97,7 +97,7 @@ export class Matrix {
     }
 
     public static slice(m: Matrix, indices: (number | null | number[])[]): Matrix {
-        if (indices.length != m.shape.length) throw Error(`Indices ${indices} must match matrix shape ${m.shape}`);
+        if (indices.length != m.shape.length) throw Error(`Indices [${indices}] must match matrix shape ${m.shape}`);
 
         let offset = m.offset;
         let newShape: number[] = [];
@@ -165,7 +165,6 @@ export class Matrix {
 
         return new Matrix(resVals, resShape);
     }
-
 
     public static split(matrix: Matrix, split_sizes: number | number[], dim: null | number = null): Matrix[] {
         if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");

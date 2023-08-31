@@ -130,7 +130,6 @@ export class Relu extends Operation {
 export class Expand extends Operation {
     private shape: number[];
     public forward(x: Tensor, shape: number[]): Tensor {
-        // console.log(`Expand forward ${x}, ${x.shape}`)
         this.shape = x.shape.slice();
         return new Tensor(MovementOp.expand(x.data, shape), {_children: [x], _op: this});
     }

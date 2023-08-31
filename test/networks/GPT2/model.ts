@@ -99,7 +99,7 @@ export class CausalSelfAttention extends Module {
         const biasSliced = Matrix.slice(TensorBufferToMatrix(this.bias.data), [null, null, [0, T], [0, T]]);
         let maskedAttn = TensorBufferToMatrix(att.data).masked_fill(biasSliced.equal(0), 0);
 
-        att = new Tensor(maskedAttn.getData());
+        att = new Tensor(maskedAttn);
         att = softmax(att, -1);
 
         att = this.attn_dropout.forward(att);
@@ -184,7 +184,7 @@ export class Transformer extends Module {
 }
 
 function numel(tensor: Tensor): Tensor {
-    return new Tensor(new Matrix(tensor.shape).prod());
+    return new Tensor(tensor.shape.reduce((p, c) => p * c));
 }
 
 export class GPT extends Module {
@@ -214,7 +214,7 @@ export class GPT extends Module {
 
     public forward(idx: Tensor, targets=null): [Tensor, Tensor] {
         const [b, t] = idx.shape;
-        const pos = new Tensor(Matrix.arange(0, t).unsqueeze(0));
+        const pos = Tensor.arange(0, t).unsqueeze(0);
 
         const tok_emb = this.transformer.wte.forward(idx);
         const pos_emb = this.transformer.wpe.forward(pos);

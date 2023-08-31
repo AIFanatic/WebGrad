@@ -83,7 +83,7 @@ export class Tensor {
         }
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
-        this.grad = Backend.CreateFromFloat32Array(0, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
+        this.grad = Backend.CreateFromFloat32Array(_options.device, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
         // this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
         this.device = _options.device;
         this.requires_grad = _options.requires_grad;
@@ -110,7 +110,7 @@ export class Tensor {
         build_topo(this);
 
         // this.grad = Tensor.ones(this.data.shape).data;
-        this.grad = Backend.CreateFromFloat32Array(0, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
+        this.grad = Backend.CreateFromFloat32Array(this.device, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
 
         for (let v of topo.reverse()) {
             if (v._op === null) continue;

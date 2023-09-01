@@ -1,11 +1,79 @@
-import { Module, nn, Random, Tensor, Matrix } from "../../../src";
-import { TensorBufferToMatrix } from "../../../src/Tensor";
+import { Module, nn, Random, Tensor } from "../../../src";
+import { Backend } from "../../../src/backend/Backend";
+import { TensorBuffer } from "../../../src/backend/TensorBuffer";
 
 Random.SetRandomSeed(1337);
 
-function softmax(att: Tensor, dim: number): Tensor {
-    const softmax = new nn.Softmax(dim);
-    return softmax.forward(att);
+// TODO: Handle negative axis and error checking
+function concatenateArrays(arrays: Array<any>, axis: number = 0): number[] {
+    if (axis < 0) {
+        throw new Error(`Invalid axis value ${axis} ${arrays[0].length}`);
+    }
+
+    if (axis === 0) {
+        // Vertical concatenation (stacking rows)
+        return [].concat(...arrays);
+    } else {
+        // Concatenate along the specified axis
+        const result: Array<any> = [];
+
+        for (let i = 0; i < arrays[0].length; i++) {
+            const newArrays = arrays.map(arr => arr[i]);
+            result.push(concatenateArrays(newArrays, axis - 1));
+        }
+
+        return result;
+    }
+}
+
+function cat(tensors: Tensor[], dim: number | null = 0): Tensor {
+    if (dim === null) {
+        const flattenData = tensors.map(v => Array.from(v.data.getData())).flat(Infinity);
+        return new Tensor(flattenData);
+    }
+    const data = tensors.map(m => m.data.getData());
+    return new Tensor(concatenateArrays(data, dim));
+}
+
+function multinomial(tensor: Tensor, num_samples: number, normalized: boolean = false): Tensor {
+    const origRank = tensor.shape.length;
+    const logits2D = origRank === 1 ? tensor.reshape([1, -1]) : tensor;
+
+    const probabilities = normalized ? logits2D : logits2D.softmax(-1);
+    const batchSize = probabilities.shape[0];
+    const numEvents = probabilities.shape[1];
+    const probVals = probabilities.data.getData().flat(Infinity);
+    const resShape = [batchSize, num_samples];
+    const resVals = new Float32Array(resShape.reduce((p, c) => p * c));
+
+    for (let b = 0; b < batchSize; ++b) {
+        const offset = b * numEvents;
+        // The cdf won't include the last event. It will be implicit if no other
+        // event happened.
+        const cdf = new Float32Array(numEvents - 1);
+        cdf[0] = probVals[offset];
+        for (let event = 1; event < cdf.length; ++event) {
+            cdf[event] = cdf[event - 1] + probVals[offset + event];
+        }
+
+        const outOffset = b * num_samples;
+        for (let sampleId = 0; sampleId < num_samples; ++sampleId) {
+            const r = Random.Random();
+
+            // Assume last event happened by default.
+            resVals[outOffset + sampleId] = cdf.length;
+
+            for (let event = 0; event < cdf.length; event++) {
+                if (r < cdf[event]) {
+                    resVals[outOffset + sampleId] = event;
+                    break;
+                }
+            }
+        }
+    }
+
+    const tb = Backend.CreateFromFloat32Array(tensor.device, resVals, resShape, TensorBuffer.computeStrides(resShape), 0);
+    return new Tensor(tb);
 }
 
 export class NewGELU extends Module {
@@ -204,7 +272,7 @@ export class GPT extends Module {
         }
     }
 
-    public forward(idx: Tensor, targets=null): [Tensor, Tensor] {
+    public forward(idx: Tensor, targets=null): Tensor {
         const [b, t] = idx.shape;
         const pos = Tensor.arange(0, t).unsqueeze(0);
 
@@ -226,25 +294,25 @@ export class GPT extends Module {
             throw Error("cross_entropy not implemented");
         }
 
-        return [logits, loss];
+        return logits;
     }
 
     public generate(idx: Tensor, max_new_tokens: number, temperature: number = 1.0, do_sample: boolean = false, top_k: number | null = null) {
         for (let i = 0; i < max_new_tokens; i++) {
             const idx_cond = idx.shape[1] < this.block_size ? idx : new Tensor(idx.data);
 
-            let [logits, _] = this.forward(idx_cond);
+            let logits = this.forward(idx_cond);
 
             // pluck the logits at the final step and scale by desired temperature
             const logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]).contiguous(); // TODO: Why contiguous
             logits = logits_temp.div(temperature).reshape([1,65]);
             
-            const probs = softmax(logits, -1);
+            const probs = logits.softmax(-1);
 
             let idx_next: Tensor
 
             if (do_sample) {
-                idx_next = new Tensor(Matrix.multinomial(TensorBufferToMatrix(probs.data), 1, true));
+                idx_next = multinomial(probs, 1, true);
             }
             else {
                 // _, idx_next = torch.topk(probs, k=1, dim=-1)
@@ -252,7 +320,7 @@ export class GPT extends Module {
             }
 
             // # append sampled index to the running sequence and continue
-            idx = new Tensor(Matrix.cat([TensorBufferToMatrix(idx.data), TensorBufferToMatrix(idx_next.data)], 1));
+            idx = cat([idx, idx_next], 1);
 
         }
         return idx;

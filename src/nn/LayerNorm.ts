@@ -15,15 +15,6 @@ export class LayerNorm extends Module {
         this.bias = elementwise_affine ? Tensor.zeros(normalized_shape, {requires_grad: true}) : null; // learnable bias
     }
 
-    private numel(tensor: Tensor): number {
-        // return new Tensor(Matrix.prod(new Matrix(tensor.shape)));
-        return tensor.shape.reduce((acc, val) => acc * val, 1);
-    }
-
-    // def layernorm(self, axis=-1, eps:float=1e-5) -> Tensor:
-        // y = (self - self.mean(axis, keepdim=True))
-        // return y.mul((y*y).mean(axis, keepdim=True).add(eps).rsqrt())
-    
     private layernorm(self: Tensor, axis: number = -1, eps: number = 1e-5): Tensor {
         const a = self.mean(axis, true);
         const y = self.sub(a);

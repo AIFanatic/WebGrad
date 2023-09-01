@@ -1,5 +1,5 @@
 import { describe, assert, equal, TensorFactory } from "./TestUtils";
-import { Tensor, Random, nn, Matrix } from "../src/";
+import { Tensor, Random, nn } from "../src/";
 
 Random.SetRandomSeed(1337);
 
@@ -42,7 +42,7 @@ describe("Dropout", () => {
 })
 
 describe("LayerNorm", () => {
-    const x = new Tensor(Matrix.arange(0, 10));
+    const x = Tensor.arange(0, 10);
     const layerNorm = new nn.LayerNorm([10]);
     const r = layerNorm.forward(x);
 
@@ -50,7 +50,7 @@ describe("LayerNorm", () => {
 })
 
 describe("Softmax", () => {
-    const x = new Tensor(Matrix.arange(0, 10));
+    const x = Tensor.arange(0, 10);
 
     const softmax = new nn.Softmax(0);
     const r = softmax.forward(x);

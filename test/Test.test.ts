@@ -1,6 +1,6 @@
 import { describe, assert, equal, TensorFactory } from "./TestUtils";
 import { Tensor } from "../src/Tensor";
-import { Matrix, nn } from "../src";
+import { nn } from "../src";
 
 // describe("Sigmoid", () => {
 //     const a = new Tensor([1,2,3,4], {requires_grad: true});
@@ -27,7 +27,7 @@ import { Matrix, nn } from "../src";
 
 
 describe("Softmax", () => {
-    const x = new Tensor(Matrix.arange(0, 10));
+    const x = Tensor.arange(0, 10);
 
     const softmax = new nn.Softmax(0);
     const r = softmax.forward(x);

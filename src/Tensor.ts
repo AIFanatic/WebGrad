@@ -1,30 +1,11 @@
 import { Operations, Random } from ".";
-import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
 import { Backend, Device } from "./backend/Backend";
 import { BinaryOp } from "./backend/BinaryOps";
 import { MovementOp } from "./backend/MovementOps";
 import { TensorBuffer } from "./backend/TensorBuffer";
 
-
-
-// TODO: Temp
-export function TensorBufferToMatrix(tensorBuffer: TensorBuffer): Matrix {
-    // return new Matrix(tensorBuffer.getData(), tensorBuffer.shape, tensorBuffer.strides, tensorBuffer.offset);
-    return new Matrix(tensorBuffer.data, tensorBuffer.shape, tensorBuffer.strides, tensorBuffer.offset);
-    // return new Matrix(tensorBuffer.getData());
-}
-
-export function MatrixToTensorBuffer(device: Device, matrix: Matrix): TensorBuffer {
-    const tf = Backend.CreateFromFloat32Array(device, matrix.data);
-    const tfShaped = Backend.CreateFromDataShapeAndStrides(tf, matrix.shape, matrix.strides, matrix.offset);
-    return tfShaped;
-}
-
-
-
-
-export type TensorDataTypes = Matrix | Tensor | TensorBuffer | Array<any> | Float32Array | number;
+export type TensorDataTypes = Tensor | TensorBuffer | Array<any> | Float32Array | number;
 
 export interface TensorOptions {
     _children?: Tensor[];
@@ -78,10 +59,6 @@ export class Tensor {
         }
         else if (data instanceof Array) this.data = Backend.CreateFromArray(_options.device, data);
         else if (data instanceof Float32Array) this.data = Backend.CreateFromFloat32Array(_options.device, data);
-        // TODO: Temp
-        else if (data instanceof Matrix) {
-            this.data = MatrixToTensorBuffer(_options.device, data);
-        }
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
         this.grad = Backend.CreateFromFloat32Array(_options.device, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));

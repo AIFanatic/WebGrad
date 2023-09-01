@@ -7,6 +7,3 @@ export { Random } from './Random';
 export * as nn from './nn';
 
 export * as Operations from './Operations';
-
-// Temp
-export { MatrixToTensorBuffer, TensorBufferToMatrix }  from "./Tensor";

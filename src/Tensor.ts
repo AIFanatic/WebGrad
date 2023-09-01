@@ -3,6 +3,7 @@ import { Matrix } from "./Matrix";
 import { Operation } from "./Operations";
 import { Backend, Device } from "./backend/Backend";
 import { BinaryOp } from "./backend/BinaryOps";
+import { MovementOp } from "./backend/MovementOps";
 import { TensorBuffer } from "./backend/TensorBuffer";
 
 
@@ -50,9 +51,9 @@ export class Tensor {
 
     public id: string;
 
-    public get shape(): number[] {
-        return this.data.shape;
-    }
+    public get shape(): number[] { return this.data.shape; }
+    public get strides(): number[] { return this.data.strides; }
+    public get offset(): number { return this.data.offset; }
 
     constructor(data: TensorDataTypes, options?: TensorOptions) {
         this.id = "P" + Math.floor(Math.random() * 1000000).toString().padStart(6, "0");
@@ -84,7 +85,6 @@ export class Tensor {
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
         this.grad = Backend.CreateFromFloat32Array(_options.device, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
-        // this.grad = _options.requires_grad ? Matrix.zeros(this.shape) : null;
         this.device = _options.device;
         this.requires_grad = _options.requires_grad;
         this._op = _options._op;
@@ -212,6 +212,76 @@ export class Tensor {
         ]
     }
 
+    public slice(indices: (number | null | number[])[]): Tensor {
+        if (indices.length != this.shape.length) throw Error(`Indices [${indices}] must match tensor shape ${this.shape}`);
+
+        let offset = this.offset;
+        let newShape: number[] = [];
+        let newStrides: number[] = [];
+        for (let i = 0; i < indices.length; i++) {
+            const index = indices[i];
+
+            if (Array.isArray(index)) { // Handle slices
+                const [start, stop] = index;
+                if (start < 0 || start >= this.shape[i] || stop < 0 || stop > this.shape[i]) {
+                    throw Error(`Slice ${start}:${stop} out of bounds for axis ${i} with size ${this.shape[i]}`);
+                }
+                offset += start * this.strides[i];
+                newShape.push(stop - start);
+                newStrides.push(this.strides[i]);
+            } else if (index !== null) { // Handle integer indices
+                if (index < 0 || index >= this.shape[i]) {
+                    throw Error(`Index ${index} out of bounds for axis ${i} with size ${this.shape[i]}`);
+                }
+                offset += index * this.strides[i];
+            } else { // Handle null (ellipsis) indices
+                newShape.push(this.shape[i]);
+                newStrides.push(this.strides[i]);
+            }
+        }
+        const tb = Backend.CreateFromDataShapeAndStrides(this.data, newShape, newStrides, offset);
+        return new Tensor(tb);
+    }
+
+    public is_contiguous(): boolean {
+        return this.data.is_contiguous();
+    }
+
+    public contiguous(): Tensor {
+        return new Tensor(MovementOp.contiguous(this.data), {device: this.device, requires_grad: this.requires_grad});
+    }
+
+    // UnaryOps
+    public masked_fill(mask: Tensor, value: number): Tensor {
+        const [mb, maskb] = this.broadcast(mask);
+
+        const fillTensor = Tensor.full(mb.shape, value, {device: this.device, requires_grad: this.requires_grad});
+        const filled = Tensor.where(maskb, fillTensor, mb);
+        return filled;
+    }
+
+    public softmax(dim: number): Tensor {
+        return this.exp().div(this.exp().sum(dim, true));
+    }
+
+    private static _tri(r: number, c: number, k: number = 0): Tensor {
+        let a = Tensor.arange(0, r).unsqueeze(1).expand([r, c]);
+        let b = Tensor.arange(-k, c - k).unsqueeze(0).expand([r, c]);
+
+        return a.lte(b);
+    }
+
+    public triu(k: number = 0): Tensor {
+        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k);
+        return Tensor.where(a, this, Tensor.zeros(this.shape));
+    }
+
+    public tril(k: number = 0): Tensor {
+        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1);
+        return Tensor.where(a, Tensor.zeros(this.shape), this);
+    }
+
+    // BinaryOps
     public add(other: Tensor | number): Tensor {
         const otherTensor: Tensor = other instanceof Tensor ? other : Tensor.full(this.data.shape, other, {device: this.device, requires_grad: this.requires_grad});
         return new Operations.Add().forward(...this.broadcast(otherTensor));
@@ -384,7 +454,7 @@ export class Tensor {
     }
 
     public static where(condition: Tensor, x: Tensor, y: Tensor): Tensor {
-        const one = new Tensor([1], {device: x.device});
+        const one = new Tensor([1], {device: x.device, requires_grad: x.requires_grad});
         return condition.mul(x).add(one.sub(condition).mul(y));
     }
 

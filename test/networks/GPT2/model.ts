@@ -69,14 +69,10 @@ export class CausalSelfAttention extends Module {
         this.resid_dropout = new nn.Dropout(config.resid_pdrop);
 
         // causal mask to ensure that attention is only applied to the left in the input sequence
-        this.bias = new Tensor(Matrix.tril(Matrix.ones([config.block_size, config.block_size]))).reshape([1,1,config.block_size,config.block_size]);
+        this.bias = Tensor.ones([config.block_size, config.block_size]).tril().reshape([1,1,config.block_size,config.block_size]);
 
         this.n_head = config.n_head;
         this.n_embd = config.n_embd;
-    }
-
-    private contiguous(tensor: Tensor): Tensor {
-        return new Tensor(tensor.data.getData());
     }
 
     public forward(x: Tensor): Tensor {
@@ -96,16 +92,13 @@ export class CausalSelfAttention extends Module {
         const t1 = new Tensor(1);
         let att = q.matmul(k.transpose(-2, -1)).mul(t1.div( Math.sqrt(k.shape[k.shape.length-1]) ))
         
-        const biasSliced = Matrix.slice(TensorBufferToMatrix(this.bias.data), [null, null, [0, T], [0, T]]);
-        let maskedAttn = TensorBufferToMatrix(att.data).masked_fill(biasSliced.equal(0), 0);
+        const biasSliced = this.bias.slice([null, null, [0, T], [0, T]]);
+        let maskedAttn = att.masked_fill(biasSliced.eq(0), 0);
 
-        att = new Tensor(maskedAttn);
-        att = softmax(att, -1);
-
-        att = this.attn_dropout.forward(att);
+        att = this.attn_dropout.forward(maskedAttn.softmax(-1));
 
         let y = att.matmul(v)
-        y = this.contiguous(y.transpose(1,2)).reshape([B,T,C]) // re-assemble all head outputs side by side
+        y = y.transpose(1,2).contiguous().reshape([B,T,C]) // re-assemble all head outputs side by side
 
         // output projection
         y = this.resid_dropout.forward(this.c_proj.forward(y));
@@ -244,9 +237,8 @@ export class GPT extends Module {
             let [logits, _] = this.forward(idx_cond);
 
             // pluck the logits at the final step and scale by desired temperature
-            // TODO: Fix getdata
-            const logits_temp = Matrix.slice(TensorBufferToMatrix(logits.data), [null, [logits.shape[1]-1, logits.shape[1]], null]);
-            logits = new Tensor(new Matrix(logits_temp.getData()).div(temperature)).reshape([1,65]);
+            const logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]).contiguous(); // TODO: Why contiguous
+            logits = logits_temp.div(temperature).reshape([1,65]);
             
             const probs = softmax(logits, -1);
 

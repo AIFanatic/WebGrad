@@ -125,3 +125,93 @@ describe("Unsqueeze", () => {
     assert(equal(c, new Tensor([[1], [2], [3], [4]])));
     assert(equal(c.shape, [4, 1]));
 })
+
+describe("Masked fill", () => {
+    const a = new Tensor([1, 2, 3, 4, 5]);
+    const mask = new Tensor([1, 0, 0, 0, 0]);
+
+    const filled = a.masked_fill(mask, 10);
+
+    assert(equal(filled, new Tensor([10, 2, 3, 4, 5])));
+});
+
+describe("Slice", () => {
+    const a = new Tensor([
+        [
+            [ 0,  1,  2,  3],
+            [ 4,  5,  6,  7]
+        ],
+        [
+            [ 8,  9, 10, 11],
+            [12, 13, 14, 15]
+        ],
+        [
+            [16, 17, 18, 19],
+            [20, 21, 22, 23]
+        ]
+    ]);
+        
+    assert(equal(a.slice([null, null, 0]), new Tensor([[0, 4], [8, 12], [16, 20]])));
+    assert(equal(a.slice([null, null, 1]), new Tensor([[1, 5], [9, 13], [17, 21]])));
+    assert(equal(a.slice([null, null, 2]), new Tensor([[2, 6], [10, 14], [18, 22]])));
+    assert(equal(a.slice([null, null, [1,2]]), new Tensor([[[1], [5]], [[9], [13]], [[17], [21]]])));
+    assert(equal(a.slice([null, [1,2], [1,2]]), new Tensor([[[5]], [[13]], [[21]]])));
+});
+
+describe("Contiguous", () => {
+    const a = new Tensor([
+        [
+            [0, 1],
+            [2, 3]
+        ],
+        [
+            [4, 5],
+            [6, 7]
+        ]
+    ]);
+
+    const b = a.T;
+    assert(equal(b, new Tensor([[[0,4], [2,6]], [[1,5], [3,7]]])));
+    assert(equal(b.shape, [2,2,2]));
+    assert(equal(b.strides, [1,2,4]));
+
+    const c = b.contiguous()
+    assert(equal(c, new Tensor([[[0,4], [2,6]], [[1,5], [3,7]]])));
+    assert(equal(c.shape, [2,2,2]));
+    assert(equal(c.strides, [4,2,1]));
+
+
+    const d = new Tensor([
+            [0, 1],
+            [2, 3],
+            [4, 5],
+            [6, 7],
+    ]);
+
+    const e = d.T;
+    const f = e.reshape([2,4]);
+    assert(equal(f, new Tensor([[0,2,4,6], [1,3,5,7]])));
+    assert(equal(f.shape, [2,4]));
+    assert(equal(f.strides, [4,1]));
+
+    const g = a.reshape([2,4]);
+    assert(equal(g, new Tensor([[0,1,2,3], [4,5,6,7]])));
+    assert(equal(g.shape, [2,4]));
+    assert(equal(g.strides, [4,1]));
+})
+
+describe("Tril", () => {
+    const a = new Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+
+    const b = a.tril();
+    assert(equal(b, new Tensor([[1, 0, 0], [4, 5, 0], [7, 8, 9], [10, 11, 12]])));
+    assert(equal(b.shape, [4, 3]));
+})
+
+describe("Triu", () => {
+    const a = new Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+    
+    const b = a.triu();
+    assert(equal(b, new Tensor([[1, 2, 3], [0, 5, 6], [0, 0, 9], [0, 0, 0]])));
+    assert(equal(b.shape, [4, 3]));
+})

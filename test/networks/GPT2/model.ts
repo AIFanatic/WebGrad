@@ -81,8 +81,7 @@ export class CausalSelfAttention extends Module {
         // calculate query, key, values for all heads in batch and move head forward to be the batch dim
 
         const c_attn_f = this.c_attn.forward(x);
-        const chunks = TensorBufferToMatrix(c_attn_f.data).split(this.n_embd);
-        let [q, k, v] = [new Tensor(chunks[0]), new Tensor(chunks[1]), new Tensor(chunks[2])];
+        let [q, k, v] = c_attn_f.split(this.n_embd);
 
         k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
         q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);

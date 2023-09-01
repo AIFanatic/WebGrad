@@ -176,10 +176,17 @@ export class Tensor {
         }
         return new Tensor(data, options).reshape(shape);
     }
+
+    public is_contiguous(): boolean {
+        return this.data.is_contiguous();
+    }
+
+    public contiguous(): Tensor {
+        return new Tensor(MovementOp.contiguous(this.data), {device: this.device, requires_grad: this.requires_grad});
+    }
     
     // Movement ops
     public get T(): Tensor { return this.permute(); }
-    // public expand(shape: number[]): Tensor { return new Tensor(MovementOp.expand(this.data, shape), {device: this.device, requires_grad: this.requires_grad}); };
     public expand(shape: number[]): Tensor { return new Operations.Expand().forward(this, shape); }
 
     private static equalArrays(first: number[], second: number[]): boolean {
@@ -243,12 +250,31 @@ export class Tensor {
         return new Tensor(tb);
     }
 
-    public is_contiguous(): boolean {
-        return this.data.is_contiguous();
-    }
-
-    public contiguous(): Tensor {
-        return new Tensor(MovementOp.contiguous(this.data), {device: this.device, requires_grad: this.requires_grad});
+    public split(split_sizes: number | number[], dim: null | number = null): Tensor[] {
+        if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");
+        if (dim !== null) throw Error("Split dim not supported");
+    
+        const chunkSize = split_sizes;
+        const lastDim = this.shape[this.shape.length - 1];
+        if (lastDim % chunkSize !== 0) {
+            throw new Error('Invalid chunk size, not evenly divisible into last tensor dimension');
+        }
+    
+        const numChunks = lastDim / chunkSize;
+        const out: Tensor[] = [];
+    
+        let start = 0;
+        for (let i = 0; i < numChunks; i++) {
+            let end = start + chunkSize;
+    
+            const sliceIndices = this.shape.map((dimSize, idx) => idx === this.shape.length - 1 ? [start, end] : [0, dimSize]);
+            const chunk = this.slice(sliceIndices);
+            out.push(chunk);
+    
+            start = end;  // Update the start index for the next iteration
+        }
+    
+        return out;
     }
 
     // UnaryOps

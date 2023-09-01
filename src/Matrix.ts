@@ -166,36 +166,69 @@ export class Matrix {
         return new Matrix(resVals, resShape);
     }
 
+    // public static split(matrix: Matrix, split_sizes: number | number[], dim: null | number = null): Matrix[] {
+    //     if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");
+    //     if (dim !== null) throw Error("Split dim not supported");
+
+    //     const chunkSize = split_sizes;
+    //     const stride = matrix.shape[matrix.shape.length - 1];
+    //     if (stride % chunkSize !== 0) {
+    //         throw new Error('Invalid chunk size, not evently divisible into last tensor dimension')
+    //     }
+
+    //     // Setup the output chunks
+    //     const out: Matrix[] = [];
+    //     const chunks = stride / chunkSize;
+
+    //     for (let c = 0; c < chunks; c++) {
+    //         out.push(Matrix.zeros([...matrix.shape.slice(0, matrix.shape.length - 1), chunkSize]));
+    //     }
+    //     const outOffsets = out.map(_ => 0);
+    //     let sourceOffset = 0;
+
+    //     // Split up the actual data
+    //     const macroChunks = matrix.data.length / stride;
+    //     for (let i = 0; i < macroChunks; i++) {
+    //         for (let j = 0; j < chunks; j++) {
+    //             out[j].data.set(matrix.data.slice(sourceOffset, sourceOffset + chunkSize), outOffsets[j])
+    //             outOffsets[j] += chunkSize;
+    //             sourceOffset += chunkSize
+    //         }
+    //     }
+
+    //     return out;
+    // }
+
     public static split(matrix: Matrix, split_sizes: number | number[], dim: null | number = null): Matrix[] {
         if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");
         if (dim !== null) throw Error("Split dim not supported");
-
+    
         const chunkSize = split_sizes;
-        const stride = matrix.shape[matrix.shape.length - 1];
-        if (stride % chunkSize !== 0) {
-            throw new Error('Invalid chunk size, not evently divisible into last tensor dimension')
+        const lastDim = matrix.shape[matrix.shape.length - 1];
+        if (lastDim % chunkSize !== 0) {
+            throw new Error('Invalid chunk size, not evenly divisible into last tensor dimension');
         }
-
-        // Setup the output chunks
+    
+        const numChunks = lastDim / chunkSize;
         const out: Matrix[] = [];
-        const chunks = stride / chunkSize;
-
-        for (let c = 0; c < chunks; c++) {
-            out.push(Matrix.zeros([...matrix.shape.slice(0, matrix.shape.length - 1), chunkSize]));
+    
+        let start = 0;
+        for (let i = 0; i < numChunks; i++) {
+            let end = start + chunkSize;
+    
+            // Assume `slice` is a method on the Matrix class that behaves similar to numpy's slice
+            // The arguments would specify the start and stop index for each dimension.
+            // Here, for the last dimension, we use `start` and `end` to specify the slice range.
+            const sliceIndices = matrix.shape.map((dimSize, idx) => 
+                idx === matrix.shape.length - 1 ? [start, end] : [0, dimSize]
+            );
+    
+            const chunk = Matrix.slice(matrix, sliceIndices)// matrix.slice(...sliceIndices);  // Getting a chunk of the matrix using slicing
+            out.push(chunk);
+    
+            start = end;  // Update the start index for the next iteration
         }
-        const outOffsets = out.map(_ => 0);
-        let sourceOffset = 0;
-
-        // Split up the actual data
-        const macroChunks = matrix.data.length / stride;
-        for (let i = 0; i < macroChunks; i++) {
-            for (let j = 0; j < chunks; j++) {
-                out[j].data.set(matrix.data.slice(sourceOffset, sourceOffset + chunkSize), outOffsets[j])
-                outOffsets[j] += chunkSize;
-                sourceOffset += chunkSize
-            }
-        }
-
+    
         return out;
     }
 

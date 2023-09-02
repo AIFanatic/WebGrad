@@ -1,0 +1,1 @@
+minGPT/projects/chargpt/chargpt.py --model.model_type=gpt-nano

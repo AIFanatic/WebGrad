@@ -40,14 +40,15 @@ function TensorTest(device: Device) {
         assert(equal(a.shape, [5]));
     })
     
-    // TestRunner.describe("rand", () => {
-    //     const a = Tensor.rand([2, 2], {device: device});
-    //     assert(equal(a, new Tensor([[0.1844118325971067, 0.2681861550081521], [0.6026948785874993, 0.05738111538812518]])));
-    //     assert(equal(a.shape, [2, 2]));
+    TestRunner.describe("rand", () => {
+        Random.SetRandomSeed(1337);
+        const a = Tensor.rand([2, 2], {device: device});
+        assert(equal(a, new Tensor([[0.1844118325971067, 0.2681861550081521], [0.6026948785874993, 0.05738111538812518]])));
+        assert(equal(a.shape, [2, 2]));
         
-    //     const b = Tensor.rand([3,1,3], {device: device});
-    //     assert(equal(b, new Tensor([[[0.4702075123786926,0.6373465061187744,0.3192155063152313]],[[0.7714118361473083,0.441847562789917,0.3168673813343048]],[[0.5497839450836182,0.5445157885551453,0.6433277726173401]]])));
-    // })
+        const b = Tensor.rand([3,1,3], {device: device});
+        assert(equal(b, new Tensor([[[0.4702075123786926,0.6373465061187744,0.3192155063152313]],[[0.7714118361473083,0.441847562789917,0.3168673813343048]],[[0.5497839450836182,0.5445157885551453,0.6433277726173401]]])));
+    })
     
     TestRunner.describe("Reshape", () => {
         const a = new Tensor([0, 1, 2, 3, 4, 5], {device: device});
@@ -242,6 +243,7 @@ function TensorTest(device: Device) {
         const c = new Tensor([[0, 1], [0, 5]], {device: device});
     
         const d = a.sum();
+        console.log(`d ${d}`)
         assert(equal(d, new Tensor([2])));
         assert(equal(d.shape, [1]));
     
@@ -394,7 +396,7 @@ function TensorTest(device: Device) {
     
         assert(equal(c, new Tensor([1, 0, 1])));
     
-        const d = new Tensor([3]);
+        const d = new Tensor([3], {device: device});
         const e = a.ne(d);
         assert(equal(e, new Tensor([1, 1, 0])));
     })
@@ -452,7 +454,7 @@ function TensorTest(device: Device) {
         const x = new Tensor([[1, 2], [3, 4]], {device: device});
         const y = new Tensor([[9, 8], [7, 6]], {device: device});
     
-        const condition = new Tensor([[1, 0], [1, 1]]);
+        const condition = new Tensor([[1, 0], [1, 1]], {device: device});
     
         const c = Tensor.where(condition, x, y);
     

@@ -30,7 +30,7 @@ var TensorBuffer = class {
   binary_op(other, op) {
     throw Error("BinaryOp not implemented");
   }
-  reduce_op(op, axis, inputShape, resultShape) {
+  reduce_op(op, axis) {
     throw Error("ReduceOp not implemented");
   }
   contiguous() {
@@ -289,10 +289,11 @@ var ReduceOp = class {
     }
     const r = input.reduce_op(op, axes, x.shape, []);
     if (keepdim) {
-      let shape = r.shape.length === 1 && r.shape[0] === 1 ? [] : r.shape;
+      const s = r.shape;
+      let shape = s.length === 1 && s[0] === 1 ? [] : s;
       let newShape = ReduceOp.expandShapeToKeepDim(shape, origAxes);
       if (newShape.length === 1 && newShape[0] === void 0)
-        newShape = [r.shape.reduce((p, c) => p * c)];
+        newShape = [s.reduce((p, c) => p * c)];
       return MovementOp.reshape(r, newShape);
     }
     return r;
@@ -370,7 +371,7 @@ var _CPUBuffer = class extends TensorBuffer {
     const shape = _m1b.shape.slice();
     return new _CPUBuffer(newData, shape, TensorBuffer.computeStrides(shape), _m1b.offset);
   }
-  reduce_op(op, axes, inputShape, resultShape) {
+  reduce_op(op, axes) {
     function computeOutAndReduceShapes(aShape, axes2) {
       const outShape2 = [];
       const rank = aShape.length;
@@ -390,7 +391,7 @@ var _CPUBuffer = class extends TensorBuffer {
       output.fill(1);
     const vals = reduceShape.reduce((p, c) => p * c);
     let additionCounter = 0;
-    const length = inputShape.reduce((p, c) => p * c);
+    const length = this.shape.reduce((p, c) => p * c);
     for (let i = 0; i < length; i++) {
       for (let index = 0; index < vals; index++) {
         if (op === 0 /* SUM */) {
@@ -838,6 +839,8 @@ var WEBGLBuffer = class extends TensorBuffer {
         return "exp(t1)";
       else if (op2 === 2 /* TANH */)
         return "tanh(t1)";
+      else if (op2 === 3 /* LOG */)
+        return "log(t1)";
     }
     const inputTexture = this.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
@@ -893,12 +896,12 @@ var WEBGLBuffer = class extends TensorBuffer {
         }`, [inputTextureX, inputTextureY], outputTexture);
     return new WEBGLBuffer(outputTexture, this.shape, this.strides, this.offset);
   }
-  reduce_op(op, axis, inputShape, resultShape) {
+  reduce_op(op, axes) {
     const webglOp = op === 0 /* SUM */ ? "+" : "*";
     function prod(array) {
       return array.reduce((p, c) => p * c);
     }
-    const axisLength = axis === null ? prod(this.shape) : this.shape[this.shape.length - 1];
+    const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
     function sumDim(input, shape, stride2) {
       const outputTexture2 = Texture.createUnpackedFromShape(null, shape);
       const uniforms2 = [
@@ -926,18 +929,9 @@ var WEBGLBuffer = class extends TensorBuffer {
                 return ivec2(index % width, index / width);
             }
 
-            float getByIndex(int index) {
-                ivec2 coords = getIndexCoords(index);
-                return texelFetch(u_tex0, coords, 0).r;
-            }
-
             int getIndexAxis(int index) {
                 float v = float(index) / float(u_axisLength);
                 return int(floor(v + EPS));
-            }
-            
-            bool indexInsideAxis(int index, int axis) {
-                return getIndexAxis(index) == axis;
             }
             
             void main() {
@@ -999,7 +993,17 @@ var WEBGLBuffer = class extends TensorBuffer {
         
             result = t1.r;
         }`, [outputTexture], outputTexturePacked, uniforms);
-    return new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+    function calculateReducedShape(originalShape, axes2, keepdim = false) {
+      if (!keepdim) {
+        return originalShape.filter((_, index) => !axes2.includes(index));
+      } else {
+        return originalShape.map((dim, index) => axes2.includes(index) ? 1 : dim);
+      }
+    }
+    let resultShape = calculateReducedShape(this.shape, axes, false);
+    resultShape = resultShape.length === 0 ? resultShape = [1] : resultShape;
+    const r = new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+    return MovementOp.reshape(r, resultShape);
   }
   contiguous() {
     const inputTexture = this.createUnpackedTexture();
@@ -1354,18 +1358,18 @@ var Tensor = class {
   softmax(dim) {
     return this.exp().div(this.exp().sum(dim, true));
   }
-  static _tri(r, c, k = 0) {
-    let a = Tensor.arange(0, r).unsqueeze(1).expand([r, c]);
-    let b = Tensor.arange(-k, c - k).unsqueeze(0).expand([r, c]);
+  static _tri(r, c, k = 0, options) {
+    let a = Tensor.arange(0, r, 1, options).unsqueeze(1).expand([r, c]);
+    let b = Tensor.arange(-k, c - k, 1, options).unsqueeze(0).expand([r, c]);
     return a.lte(b);
   }
   triu(k = 0) {
-    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k);
-    return Tensor.where(a, this, Tensor.zeros(this.shape));
+    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k, { device: this.device });
+    return Tensor.where(a, this, Tensor.zeros(this.shape, { device: this.device }));
   }
   tril(k = 0) {
-    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1);
-    return Tensor.where(a, Tensor.zeros(this.shape), this);
+    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1, { device: this.device });
+    return Tensor.where(a, Tensor.zeros(this.shape, { device: this.device }), this);
   }
   // BinaryOps
   add(other) {
@@ -1490,7 +1494,7 @@ var Tensor = class {
     return new Operations_exports.Equal().forward(...this.broadcast(otherTensor));
   }
   ne(other) {
-    const one = new Tensor([1], { device: this.device });
+    const one = new Tensor(1, { device: this.device });
     return one.sub(this.eq(other));
   }
   gte(other) {
@@ -1930,12 +1934,12 @@ var Exp = class extends Operation {
 };
 var Relu = class extends Operation {
   forward(x) {
-    this.out = new Tensor(Tensor.zeros(x.shape).maximum(x), { _children: [x], _op: this });
+    this.out = new Tensor(Tensor.zeros(x.shape, { device: x.device }).maximum(x), { _children: [x], _op: this });
     return this.out;
   }
   backward(grad) {
     return [
-      Tensor.where(this.out.gt(0), new Tensor(grad), Tensor.zeros(this.out.shape)).data,
+      Tensor.where(this.out.gt(0), new Tensor(grad), Tensor.zeros(this.out.shape, { device: this.out.device })).data,
       null
     ];
   }

@@ -1,3 +1,5 @@
+import { SumTests } from "./web/Sum.test";
+import { TensorGradTests } from "./web/Tensor.Grad.test";
 import { TensorTests } from "./web/Tensor.test";
 import { TestTests } from "./web/Test.test";
 
@@ -7,7 +9,9 @@ export class TestRunner {
     }
 
     public static UnitTests = [
-        TestTests,
-        TensorTests
+        // TestTests,
+        // SumTests
+        TensorTests,
+        TensorGradTests,
     ]
 }

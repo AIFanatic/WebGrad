@@ -3,6 +3,7 @@ import { TensorBuffer } from "./TensorBuffer";
 import { UnaryOps } from "./UnaryOps";
 import { BinaryOps } from "./BinaryOps";
 import { ReduceOps } from "./ReduceOps";
+import { MovementOp } from "./MovementOps";
 
 function equalArrays(a: number[], b: number[]): boolean {
     if (a.length !== b.length) return false;
@@ -564,6 +565,7 @@ export class WEBGLBuffer extends TensorBuffer {
             if (op === UnaryOps.ABS) return "abs(t1)";
             else if (op === UnaryOps.EXP) return "exp(t1)";
             else if (op === UnaryOps.TANH) return "tanh(t1)";
+            else if (op === UnaryOps.LOG) return "log(t1)";
         }
 
         const inputTexture = this.createUnpackedTexture();
@@ -620,16 +622,14 @@ export class WEBGLBuffer extends TensorBuffer {
         return new WEBGLBuffer(outputTexture, this.shape, this.strides, this.offset);
     }
 
-    public reduce_op(op: ReduceOps, axis: number, inputShape: number[], resultShape: number[]): WEBGLBuffer {
-        // console.time("reduce_op");
-
+    public reduce_op(op: ReduceOps, axes: number[]): WEBGLBuffer {
         const webglOp = op === ReduceOps.SUM ? "+" : "*";
 
         function prod(array: number[]): number {
             return array.reduce((p, c) => p * c);
         }
 
-        const axisLength = axis === null ? prod(this.shape) : this.shape[this.shape.length - 1];
+        const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
 
         function sumDim(input: Texture, shape: number[], stride: number): Texture {
             const outputTexture = Texture.createUnpackedFromShape(null, shape);
@@ -660,18 +660,9 @@ export class WEBGLBuffer extends TensorBuffer {
                 return ivec2(index % width, index / width);
             }
 
-            float getByIndex(int index) {
-                ivec2 coords = getIndexCoords(index);
-                return texelFetch(u_tex0, coords, 0).r;
-            }
-
             int getIndexAxis(int index) {
                 float v = float(index) / float(u_axisLength);
                 return int(floor(v + EPS));
-            }
-            
-            bool indexInsideAxis(int index, int axis) {
-                return getIndexAxis(index) == axis;
             }
             
             void main() {
@@ -742,7 +733,22 @@ export class WEBGLBuffer extends TensorBuffer {
         }`, [outputTexture], outputTexturePacked, uniforms);
 
         // console.timeEnd("reduce_op");
-        return new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+
+
+        function calculateReducedShape(originalShape, axes, keepdim = false) {
+            if (!keepdim) {
+                return originalShape.filter((_, index) => !axes.includes(index));
+            } else {
+                return originalShape.map((dim, index) => axes.includes(index) ? 1 : dim);
+            }
+        }
+        let resultShape = calculateReducedShape(this.shape, axes, false);
+        resultShape = resultShape.length === 0 ? resultShape = [1] : resultShape;
+
+        // return new WEBGLBuffer(outputTexturePacked, resultShape, TensorBuffer.computeStrides(resultShape), this.offset);
+        
+        const r = new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+        return MovementOp.reshape(r, resultShape) as unknown as WEBGLBuffer;
     }
 
     public contiguous(): WEBGLBuffer {

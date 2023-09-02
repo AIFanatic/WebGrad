@@ -72,13 +72,14 @@ export class ReduceOp {
         const r = input.reduce_op(op, axes, x.shape, []);
         
         if (keepdim) {
-            let shape = r.shape.length === 1 && r.shape[0] === 1 ? [] : r.shape;
+            const s = r.shape;
+            let shape = s.length === 1 && s[0] === 1 ? [] : s;
             let newShape = ReduceOp.expandShapeToKeepDim(shape, origAxes);
-            if (newShape.length === 1 && newShape[0] === undefined) newShape = [r.shape.reduce((p, c) => p * c)];
-            // console.log(`newShape`, newShape)
+            if (newShape.length === 1 && newShape[0] === undefined) newShape = [s.reduce((p, c) => p * c)];
 
             return MovementOp.reshape(r, newShape);
         }
+
         return r;
     }
 

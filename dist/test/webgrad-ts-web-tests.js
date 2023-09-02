@@ -705,132 +705,6 @@ var Matrix = class {
   }
 };
 
-// src/Module.ts
-var Module = class {
-  constructor() {
-    this._total_params = 0;
-  }
-  forward(x) {
-    throw Error("Not implemented");
-  }
-  zero_grad() {
-    for (let p of this.parameters()) {
-      p.zero_grad();
-    }
-  }
-  get total_params() {
-    return this._total_params;
-  }
-  named_parameters(prefix = "") {
-    let result = {};
-    for (let key of Object.keys(this)) {
-      let fullPath = prefix + key;
-      if (this[key] instanceof Module) {
-        let childParameters = this[key].named_parameters(fullPath + ".");
-        for (let childKey in childParameters) {
-          result[childKey] = childParameters[childKey];
-        }
-      } else if (Array.isArray(this[key])) {
-        this[key].forEach((item, index) => {
-          if (item instanceof Module) {
-            let childParameters = item.named_parameters(fullPath + "." + index + ".");
-            for (let childKey in childParameters) {
-              result[childKey] = childParameters[childKey];
-            }
-          } else if (item instanceof Tensor) {
-            result[`${fullPath}[${index}]`] = item;
-          }
-        });
-      } else if (this[key] instanceof Tensor) {
-        result[fullPath] = this[key];
-      }
-    }
-    return result;
-  }
-  parameters() {
-    let params = [];
-    const keys = Object.keys(this);
-    for (let key of keys) {
-      const property = this[key];
-      if (property instanceof Module) {
-        const module = property;
-        params.push(...module.parameters());
-      } else if (property instanceof Array) {
-        for (let ak of property) {
-          if (ak instanceof Module) {
-            const module = ak;
-            params.push(...module.parameters());
-          }
-        }
-      }
-    }
-    this._total_params = params.length;
-    return params;
-  }
-  get_name() {
-    return this.constructor.name;
-  }
-  toString() {
-    function _addindent(s_, numSpaces) {
-      let s = s_.split("\n");
-      if (s.length == 1) {
-        return s_;
-      }
-      const first = s.shift();
-      s = s.map((line) => new Array(numSpaces).fill(" ").join("") + line);
-      let str = "";
-      for (let line of s) {
-        str += "\n" + line;
-      }
-      str = first + str;
-      return str;
-    }
-    let child_lines = [];
-    const keys = Object.keys(this);
-    for (let key of keys) {
-      if (this[key] instanceof Module || this[key]["parameters"]) {
-        const module = this[key];
-        let mod_str = `${module}`;
-        mod_str = _addindent(mod_str, 2);
-        child_lines.push("(" + key + "): " + mod_str);
-      } else if (this[key] instanceof Array && key !== "layers") {
-        for (let ak of this[key]) {
-          const module = ak;
-          let mod_str = `${module}`;
-          mod_str = _addindent(mod_str, 2);
-          child_lines.push("(" + key + "): " + mod_str);
-        }
-      }
-    }
-    const lines = child_lines;
-    let main_str = this.get_name() + "(";
-    if (lines) {
-      main_str += "\n  ";
-      for (let line of lines) {
-        main_str += line + "\n  ";
-      }
-    }
-    main_str += ")";
-    return main_str;
-  }
-  load_state_dict(stateDict) {
-    const namedParameters = this.named_parameters();
-    const entries = Object.entries(stateDict);
-    for (let state of entries) {
-      const path = state[0];
-      const tensor = state[1];
-      if (!namedParameters[path])
-        throw Error(`Layer ${path} not found`);
-      const t = new Tensor(tensor);
-      const stateTensorShape = t.shape.reduce((p, c) => p * c);
-      const modelParameterShape = namedParameters[path].shape.reduce((p, c) => p * c);
-      if (stateTensorShape != modelParameterShape)
-        throw Error(`State tensor shape (${stateTensorShape}) doesn't match model tensor shape (${modelParameterShape})`);
-      namedParameters[path].assign(t);
-    }
-  }
-};
-
 // src/backend/TensorBuffer.ts
 var TensorBuffer = class {
   constructor(shape, strides, offset, device) {
@@ -857,7 +731,7 @@ var TensorBuffer = class {
   binary_op(other, op) {
     throw Error("BinaryOp not implemented");
   }
-  reduce_op(op, axis, inputShape, resultShape) {
+  reduce_op(op, axis) {
     throw Error("ReduceOp not implemented");
   }
   contiguous() {
@@ -1116,10 +990,11 @@ var ReduceOp = class {
     }
     const r = input.reduce_op(op, axes, x.shape, []);
     if (keepdim) {
-      let shape = r.shape.length === 1 && r.shape[0] === 1 ? [] : r.shape;
+      const s = r.shape;
+      let shape = s.length === 1 && s[0] === 1 ? [] : s;
       let newShape = ReduceOp.expandShapeToKeepDim(shape, origAxes);
       if (newShape.length === 1 && newShape[0] === void 0)
-        newShape = [r.shape.reduce((p, c) => p * c)];
+        newShape = [s.reduce((p, c) => p * c)];
       return MovementOp.reshape(r, newShape);
     }
     return r;
@@ -1197,7 +1072,7 @@ var _CPUBuffer = class extends TensorBuffer {
     const shape = _m1b.shape.slice();
     return new _CPUBuffer(newData, shape, TensorBuffer.computeStrides(shape), _m1b.offset);
   }
-  reduce_op(op, axes, inputShape, resultShape) {
+  reduce_op(op, axes) {
     function computeOutAndReduceShapes(aShape, axes2) {
       const outShape2 = [];
       const rank = aShape.length;
@@ -1217,7 +1092,7 @@ var _CPUBuffer = class extends TensorBuffer {
       output.fill(1);
     const vals = reduceShape.reduce((p, c) => p * c);
     let additionCounter = 0;
-    const length = inputShape.reduce((p, c) => p * c);
+    const length = this.shape.reduce((p, c) => p * c);
     for (let i = 0; i < length; i++) {
       for (let index = 0; index < vals; index++) {
         if (op === 0 /* SUM */) {
@@ -1665,6 +1540,8 @@ var WEBGLBuffer = class extends TensorBuffer {
         return "exp(t1)";
       else if (op2 === 2 /* TANH */)
         return "tanh(t1)";
+      else if (op2 === 3 /* LOG */)
+        return "log(t1)";
     }
     const inputTexture = this.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
@@ -1720,12 +1597,12 @@ var WEBGLBuffer = class extends TensorBuffer {
         }`, [inputTextureX, inputTextureY], outputTexture);
     return new WEBGLBuffer(outputTexture, this.shape, this.strides, this.offset);
   }
-  reduce_op(op, axis, inputShape, resultShape) {
+  reduce_op(op, axes) {
     const webglOp = op === 0 /* SUM */ ? "+" : "*";
     function prod(array) {
       return array.reduce((p, c) => p * c);
     }
-    const axisLength = axis === null ? prod(this.shape) : this.shape[this.shape.length - 1];
+    const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
     function sumDim(input, shape, stride2) {
       const outputTexture2 = Texture.createUnpackedFromShape(null, shape);
       const uniforms2 = [
@@ -1753,18 +1630,9 @@ var WEBGLBuffer = class extends TensorBuffer {
                 return ivec2(index % width, index / width);
             }
 
-            float getByIndex(int index) {
-                ivec2 coords = getIndexCoords(index);
-                return texelFetch(u_tex0, coords, 0).r;
-            }
-
             int getIndexAxis(int index) {
                 float v = float(index) / float(u_axisLength);
                 return int(floor(v + EPS));
-            }
-            
-            bool indexInsideAxis(int index, int axis) {
-                return getIndexAxis(index) == axis;
             }
             
             void main() {
@@ -1826,7 +1694,17 @@ var WEBGLBuffer = class extends TensorBuffer {
         
             result = t1.r;
         }`, [outputTexture], outputTexturePacked, uniforms);
-    return new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+    function calculateReducedShape(originalShape, axes2, keepdim = false) {
+      if (!keepdim) {
+        return originalShape.filter((_, index) => !axes2.includes(index));
+      } else {
+        return originalShape.map((dim, index) => axes2.includes(index) ? 1 : dim);
+      }
+    }
+    let resultShape = calculateReducedShape(this.shape, axes, false);
+    resultShape = resultShape.length === 0 ? resultShape = [1] : resultShape;
+    const r = new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+    return MovementOp.reshape(r, resultShape);
   }
   contiguous() {
     const inputTexture = this.createUnpackedTexture();
@@ -1959,157 +1837,6 @@ var Backend = class {
     else if (data instanceof WEBGLBuffer)
       return new WEBGLBuffer(data, shape, strides, offset);
     throw Error(`Unable to call CreateFromDataShapeAndStrides`);
-  }
-};
-
-// src/nn/index.ts
-var nn_exports = {};
-__export(nn_exports, {
-  Dropout: () => Dropout,
-  Embedding: () => Embedding,
-  LayerNorm: () => LayerNorm,
-  Linear: () => Linear,
-  Sequential: () => Sequential,
-  Softmax: () => Softmax
-});
-
-// src/nn/Sequential.ts
-var Sequential = class extends Module {
-  constructor(...modules) {
-    super();
-    this.modules = modules;
-  }
-  forward(x) {
-    for (let module of this.modules) {
-      x = module.forward(x);
-    }
-    return x;
-  }
-};
-
-// src/nn/Linear.ts
-var Linear = class extends Module {
-  constructor(in_features, out_features) {
-    super();
-    this.weight = Tensor.uniform(-1, 1, [out_features, in_features], { requires_grad: true });
-    this.bias = Tensor.zeros([out_features], { requires_grad: true });
-    this.in_features = in_features;
-    this.out_features = out_features;
-  }
-  forward(x) {
-    const wt = this.weight.permute();
-    x = wt.shape.length === 1 ? x.mul(wt) : x.matmul(wt);
-    return this.bias ? x.add(this.bias) : x;
-  }
-  parameters() {
-    return [this.weight, this.bias];
-  }
-  toString() {
-    return `Linear(in_features=${this.in_features}, out_features=${this.out_features})`;
-  }
-};
-
-// src/nn/Dropout.ts
-var Dropout = class extends Module {
-  // p = probability of an element to be zeroed.
-  constructor(p = 0.5) {
-    super();
-    this.pScalar = p;
-    this.p = new Tensor(p);
-  }
-  forward(x) {
-    if (this.pScalar === 0)
-      return x;
-    const mask = Tensor.rand(x.shape).gte(this.p).reshape(x.shape);
-    return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
-  }
-  parameters() {
-    return [];
-  }
-  toString() {
-    return `Dropout(p=${this.pScalar.toFixed(2)})`;
-  }
-};
-
-// src/nn/LayerNorm.ts
-var LayerNorm = class extends Module {
-  constructor(normalized_shape, eps = 1e-5, elementwise_affine = true) {
-    super();
-    this.eps = eps;
-    this.elementwise_affine = elementwise_affine;
-    this.weight = Tensor.ones(normalized_shape, { requires_grad: true });
-    this.bias = elementwise_affine ? Tensor.zeros(normalized_shape, { requires_grad: true }) : null;
-  }
-  layernorm(self, axis = -1, eps = 1e-5) {
-    const a = self.mean(axis, true);
-    const y = self.sub(a);
-    const b = y.mul(y);
-    const c = b.mean(axis, true);
-    const d = c.add(eps);
-    const e = d.rsqrt();
-    const f = y.mul(e);
-    return f;
-  }
-  forward(x) {
-    const axis = -1;
-    x = this.layernorm(x, axis, this.eps);
-    if (!this.elementwise_affine)
-      return x;
-    return x.mul(this.weight).add(this.bias);
-  }
-  parameters() {
-    return [this.weight, this.bias];
-  }
-  toString() {
-    return `LayerNorm(eps=${this.eps})`;
-  }
-};
-
-// src/nn/Softmax.ts
-var Softmax = class extends Module {
-  constructor(dim) {
-    super();
-    this.dim = dim;
-  }
-  forward(x) {
-    return x.exp().div(x.exp().sum(this.dim, true));
-  }
-  parameters() {
-    return [];
-  }
-  toString() {
-    return `SoftMax(dim=${this.dim})`;
-  }
-};
-
-// src/nn/Embedding.ts
-var Embedding = class extends Module {
-  constructor(num_embeddings, embedding_dim) {
-    super();
-    this.weight = Tensor.uniform(-1, 1, [num_embeddings, embedding_dim], { requires_grad: true });
-    this.num_embeddings = num_embeddings;
-    this.embedding_dim = embedding_dim;
-  }
-  getFirsts(v) {
-    const data = v.data.getData();
-    return [data[0][0][0], data[0][0][1], data[0][0][2]];
-  }
-  forward(x) {
-    const va = Tensor.arange(0, this.num_embeddings);
-    const vb = va.reshape([1, 1, this.num_embeddings]);
-    const vc = vb.expand([...x.shape, this.num_embeddings]);
-    const vocab_counter = vc;
-    const a = x.unsqueeze(2);
-    const b = vocab_counter.eq(a);
-    const c = b.expand([...x.shape, this.num_embeddings]);
-    const d = c.matmul(this.weight);
-    return new Tensor(d);
-  }
-  parameters() {
-    return [this.weight];
-  }
-  toString() {
-    return `Embedding(num_embeddings=${this.num_embeddings}, embedding_dim=${this.embedding_dim})`;
   }
 };
 
@@ -2550,18 +2277,18 @@ var Tensor = class {
   softmax(dim) {
     return this.exp().div(this.exp().sum(dim, true));
   }
-  static _tri(r, c, k = 0) {
-    let a = Tensor.arange(0, r).unsqueeze(1).expand([r, c]);
-    let b = Tensor.arange(-k, c - k).unsqueeze(0).expand([r, c]);
+  static _tri(r, c, k = 0, options) {
+    let a = Tensor.arange(0, r, 1, options).unsqueeze(1).expand([r, c]);
+    let b = Tensor.arange(-k, c - k, 1, options).unsqueeze(0).expand([r, c]);
     return a.lte(b);
   }
   triu(k = 0) {
-    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k);
-    return Tensor.where(a, this, Tensor.zeros(this.shape));
+    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k, { device: this.device });
+    return Tensor.where(a, this, Tensor.zeros(this.shape, { device: this.device }));
   }
   tril(k = 0) {
-    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1);
-    return Tensor.where(a, Tensor.zeros(this.shape), this);
+    const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1, { device: this.device });
+    return Tensor.where(a, Tensor.zeros(this.shape, { device: this.device }), this);
   }
   // BinaryOps
   add(other) {
@@ -2686,7 +2413,7 @@ var Tensor = class {
     return new Operations_exports.Equal().forward(...this.broadcast(otherTensor));
   }
   ne(other) {
-    const one = new Tensor([1], { device: this.device });
+    const one = new Tensor(1, { device: this.device });
     return one.sub(this.eq(other));
   }
   gte(other) {
@@ -2809,6 +2536,25 @@ function TensorFactory(tensorData) {
   return tensor;
 }
 
+// test/web/Tensor.Grad.test.ts
+function TensorGradTest(device) {
+  TestRunner.describe("Add", () => {
+    const a = new Tensor([1, 2, 3], { device, requires_grad: true });
+    const b = new Tensor([4, 5, 6], { device, requires_grad: true });
+    const c = a.add(b);
+    c.backward();
+    console.log(`-----${a.device}-----`);
+    console.log(`a ${a}`, a.device);
+    console.log(`b ${b}`);
+    console.log(`c ${c}`);
+    console.log(``);
+    assert(equal(a, TensorFactory({ data: [1, 2, 3], grad: [1, 1, 1] })));
+    assert(equal(b, TensorFactory({ data: [4, 5, 6], grad: [1, 1, 1] })));
+    assert(equal(c, TensorFactory({ data: [5, 7, 9], grad: [1, 1, 1] })));
+  });
+}
+var TensorGradTests = { category: "Tensor Grad", func: TensorGradTest };
+
 // test/web/Tensor.test.ts
 Random.SetRandomSeed(1337);
 function TensorTest(device) {
@@ -2837,6 +2583,14 @@ function TensorTest(device) {
     const a = Tensor.arange(10, 20, 2, { device });
     assert(equal(a, new Tensor([10, 12, 14, 16, 18])));
     assert(equal(a.shape, [5]));
+  });
+  TestRunner.describe("rand", () => {
+    Random.SetRandomSeed(1337);
+    const a = Tensor.rand([2, 2], { device });
+    assert(equal(a, new Tensor([[0.1844118325971067, 0.2681861550081521], [0.6026948785874993, 0.05738111538812518]])));
+    assert(equal(a.shape, [2, 2]));
+    const b = Tensor.rand([3, 1, 3], { device });
+    assert(equal(b, new Tensor([[[0.4702075123786926, 0.6373465061187744, 0.3192155063152313]], [[0.7714118361473083, 0.441847562789917, 0.3168673813343048]], [[0.5497839450836182, 0.5445157885551453, 0.6433277726173401]]])));
   });
   TestRunner.describe("Reshape", () => {
     const a = new Tensor([0, 1, 2, 3, 4, 5], { device });
@@ -2987,6 +2741,7 @@ function TensorTest(device) {
     const b = new Tensor([[1, 2], [3, 4]], { device });
     const c = new Tensor([[0, 1], [0, 5]], { device });
     const d = a.sum();
+    console.log(`d ${d}`);
     assert(equal(d, new Tensor([2])));
     assert(equal(d.shape, [1]));
     const e = b.sum();
@@ -3106,7 +2861,7 @@ function TensorTest(device) {
     const b = new Tensor([0, 2, 2], { device });
     const c = a.ne(b);
     assert(equal(c, new Tensor([1, 0, 1])));
-    const d = new Tensor([3]);
+    const d = new Tensor([3], { device });
     const e = a.ne(d);
     assert(equal(e, new Tensor([1, 1, 0])));
   });
@@ -3148,7 +2903,7 @@ function TensorTest(device) {
   TestRunner.describe("Where using matrix", () => {
     const x = new Tensor([[1, 2], [3, 4]], { device });
     const y = new Tensor([[9, 8], [7, 6]], { device });
-    const condition = new Tensor([[1, 0], [1, 1]]);
+    const condition = new Tensor([[1, 0], [1, 1]], { device });
     const c = Tensor.where(condition, x, y);
     assert(equal(c, new Tensor([[1, 8], [3, 4]])));
   });
@@ -3289,24 +3044,6 @@ function TensorTest(device) {
 }
 var TensorTests = { category: "Tensor", func: TensorTest };
 
-// test/web/Test.test.ts
-function TestTest(device) {
-  TestRunner.describe("Softmax", () => {
-    const x = Tensor.arange(0, 10);
-    const softmax = new nn_exports.Softmax(0);
-    const r = softmax.forward(x);
-    assert(equal(r, TensorFactory({ data: [7801341612780744e-20, 21206245143623275e-20, 5764455082375903e-19, 0.0015669413501390806, 0.004259388198344144, 0.011578217539911801, 0.031472858344688034, 0.08555209892803112, 0.23255471590259755, 0.6321492583604867], grad: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })));
-    const x1 = new Tensor([[5, 6, 3]]);
-    const softmax1 = new nn_exports.Softmax(1);
-    const r1 = softmax1.forward(x1);
-    assert(equal(r1, TensorFactory({ data: [[0.25949646034241913, 0.7053845126982412, 0.03511902695933972]], grad: [[0, 0, 0]] })));
-    const softmax2 = new nn_exports.Softmax(-1);
-    const r2 = softmax2.forward(x1);
-    assert(equal(r2, TensorFactory({ data: [[0.25949646034241913, 0.7053845126982412, 0.03511902695933972]], grad: [[0, 0, 0]] })));
-  });
-}
-var TestTests = { category: "Test", func: TestTest };
-
 // test/run-web.ts
 var TestRunner = class {
   static describe(name, func) {
@@ -3314,8 +3051,10 @@ var TestRunner = class {
   }
 };
 TestRunner.UnitTests = [
-  TestTests,
-  TensorTests
+  // TestTests,
+  // SumTests
+  TensorTests,
+  TensorGradTests
 ];
 export {
   TestRunner

@@ -78,14 +78,7 @@ export class CPUBuffer extends TensorBuffer {
         return new CPUBuffer(newData, shape, TensorBuffer.computeStrides(shape), _m1b.offset);
     }
 
-    public reduce_op(op: ReduceOps, axes: number[], inputShape: number[], resultShape: number[]): CPUBuffer {
-        // if (axis === null) {
-        //     let data = new Float32Array();
-        //     if (op === ReduceOps.SUM) data = new Float32Array([this.data.reduce((p, c) => p + c)]);
-        //     else if (op === ReduceOps.PROD) data = new Float32Array([this.data.reduce((p, c) => p * c)]);
-        //     return new CPUBuffer(data, resultShape, TensorBuffer.computeStrides(resultShape), 0);
-        // }
-
+    public reduce_op(op: ReduceOps, axes: number[]): CPUBuffer {
         function computeOutAndReduceShapes(aShape: number[], axes: number[]): [number[], number[]] {
             const outShape = [];
             const rank = aShape.length;
@@ -110,7 +103,7 @@ export class CPUBuffer extends TensorBuffer {
         const vals = reduceShape.reduce((p, c) => p * c);
         let additionCounter = 0;
 
-        const length = inputShape.reduce((p, c) => p * c);
+        const length = this.shape.reduce((p, c) => p * c);
 
         for (let i = 0; i < length; i++) {
             for (let index = 0; index < vals; index++) {

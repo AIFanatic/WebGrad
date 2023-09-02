@@ -275,21 +275,21 @@ export class Tensor {
         return this.exp().div(this.exp().sum(dim, true));
     }
 
-    private static _tri(r: number, c: number, k: number = 0): Tensor {
-        let a = Tensor.arange(0, r).unsqueeze(1).expand([r, c]);
-        let b = Tensor.arange(-k, c - k).unsqueeze(0).expand([r, c]);
+    private static _tri(r: number, c: number, k: number = 0, options?: TensorOptions): Tensor {
+        let a = Tensor.arange(0, r, 1, options).unsqueeze(1).expand([r, c]);
+        let b = Tensor.arange(-k, c - k, 1, options).unsqueeze(0).expand([r, c]);
 
         return a.lte(b);
     }
 
     public triu(k: number = 0): Tensor {
-        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k);
-        return Tensor.where(a, this, Tensor.zeros(this.shape));
+        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k, {device: this.device});
+        return Tensor.where(a, this, Tensor.zeros(this.shape, {device: this.device}));
     }
 
     public tril(k: number = 0): Tensor {
-        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1);
-        return Tensor.where(a, Tensor.zeros(this.shape), this);
+        const a = Tensor._tri(this.shape[this.shape.length - 2], this.shape[this.shape.length - 1], k + 1, {device: this.device});
+        return Tensor.where(a, Tensor.zeros(this.shape, {device: this.device}), this);
     }
 
     // BinaryOps
@@ -452,7 +452,7 @@ export class Tensor {
     }
 
     public ne(other: Tensor | number) {
-        const one = new Tensor([1], {device: this.device});
+        const one = new Tensor(1, {device: this.device});
         return one.sub(this.eq(other));
     }
 

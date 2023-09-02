@@ -23,7 +23,7 @@ export class TensorBuffer {
     
     public unary_op(op: UnaryOps): TensorBuffer { throw Error("UnaryOp not implemented"); }
     public binary_op(other: TensorBuffer, op: BinaryOps): TensorBuffer { throw Error("BinaryOp not implemented"); }
-    public reduce_op(op: ReduceOps, axis: number | null, inputShape: number[], resultShape: number[]): TensorBuffer { throw Error("ReduceOp not implemented"); }
+    public reduce_op(op: ReduceOps, axis: number[]): TensorBuffer { throw Error("ReduceOp not implemented"); }
     
     public contiguous(): TensorBuffer { throw Error("ReduceOp not implemented"); }
 

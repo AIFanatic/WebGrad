@@ -1,17 +1,17 @@
 {
-  "name": "micrograd-ts",
+  "name": "webgrad-ts",
   "version": "1.0.0",
-  "main": "dist/micrograd-ts.js",
+  "main": "dist/webgrad-ts.js",
   "types": "dist/index.d.ts",
-  "module": "dist/micrograd-ts.js",
+  "module": "dist/webgrad-ts.js",
   "files": [
     "/dist"
   ],
   "license": "MIT",
   "scripts": {
     "build:types": "tsc --emitDeclarationOnly",
-    "build": "esbuild ./src/index.ts --bundle --outfile=./dist/micrograd-ts.js --target=es2020 --format=esm",
-    "dev": "esbuild ./src/index.ts --bundle --outfile=./dist/micrograd-ts.js --target=es2020 --format=esm --watch",
+    "build": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm",
+    "dev": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm --watch",
     "test": "esr ./test/run.ts"
   },
   "devDependencies": {

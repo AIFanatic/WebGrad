@@ -1,4 +1,4 @@
-# Micrograd-ts
+# WebGrad
 
 ## TODO/FIX
 * If requires_grad is made optional tests fail with grad = null when it shouldn't

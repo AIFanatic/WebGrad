@@ -90,9 +90,9 @@ function equalMatrix(a: Matrix, b: Matrix, EPS: number = 1e-5): boolean {
 }
 
 function equalTensor(a: Tensor, b: Tensor, EPS: number = 1e-5): boolean {
-    const equalData = equalMatrix(a.data, b.data, EPS);
-    // const equalGrads = a.grad && b.grad ? equalFloat32Array(a.grad.data, b.grad.data, EPS) : true;
+    const equalData = equalTensorBuffer(a.data, b.data, EPS);
     const equalGrads = a.grad && b.grad ? equalTensorBuffer(a.grad, b.grad, EPS) : true;
+    // const equalDevice = a.device === b.device;
     return equalData && equalGrads;
 }
 
@@ -148,6 +148,6 @@ export interface ITensorFactory {
 
 export function TensorFactory(tensorData: ITensorFactory): Tensor {
     const tensor = new Tensor(tensorData.data);
-    tensor.grad = new Matrix(tensorData.grad);
+    tensor.grad = new Tensor(tensorData.grad).data;
     return tensor;
 }

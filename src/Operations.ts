@@ -130,13 +130,13 @@ export class Exp extends Operation {
 export class Relu extends Operation {
     private out: Tensor;
     public forward(x: Tensor): Tensor {
-        this.out = new Tensor(Tensor.zeros(x.shape).maximum(x), {_children: [x], _op: this});
+        this.out = new Tensor(Tensor.zeros(x.shape, {device: x.device}).maximum(x), {_children: [x], _op: this});
         return this.out;
     }
 
     public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
         return [
-            Tensor.where(this.out.gt(0), new Tensor(grad), Tensor.zeros(this.out.shape)).data,
+            Tensor.where(this.out.gt(0), new Tensor(grad), Tensor.zeros(this.out.shape, {device: this.out.device})).data,
             null
         ];
     }

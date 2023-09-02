@@ -1,0 +1,191 @@
+<html>
+
+<head>
+    <style>
+        html {
+            font-family: monospace;
+        }
+        
+        table {
+            border-spacing: 0;
+        }
+
+        td {
+            border: 0.1px solid #33333380;
+            border-spacing: 0;
+            padding: 5px;
+        }
+
+        thead,
+        tfoot {
+            background-color: #333;
+            color: #fff;
+        }
+
+        .category {
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root">
+        <table style="width: 100%">
+            <thead>
+                <tr>
+                    <td>Category</td>
+                    <td>Duration</td>
+                    <td>Passed</td>
+                    <td>Failed</td>
+                </tr>
+            </thead>
+            <tbody id="tests-table-body">
+            </tbody>
+        </table>
+    </div>
+
+    <script type="module">
+        import { Device } from '../webgrad-ts.js';
+        import { TestRunner } from './webgrad-ts-web-tests.js';
+
+        function hashCode(s) {
+            let h = 0;
+            for(let i = 0; i < s.length; i++) {
+                h = Math.imul(31, h) + s.charCodeAt(i) | 0;
+            }
+        
+            return Math.abs(h).toString(16);
+        }
+
+        // Add table header
+        function AddCategory(tableBody, name) {
+            const nameId = hashCode(name);
+            const main = document.createElement("tr");
+            main.id = `category-${nameId}`;
+            main.classList.add("category");
+            main.innerHTML = `
+                <td>${name}</td>
+                <td data-id="duration">-</td>
+                <td data-id="passed">0</td>
+                <td data-id="failed">0</td>
+            `;
+
+            const tests = document.createElement("tr");
+            tests.id = `tests-${nameId}`;
+            tests.style.display = "none";
+            tests.innerHTML = `
+                <td colspan="4">
+                    <table style="width: 100%">
+                        <thead>
+                            <tr>
+                                <td>Test</td>
+                                <td>Device</td>
+                                <td>Duration</td>
+                                <td>Result</td>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </td>
+            `;
+
+            main.addEventListener("click", event => {
+                tests.style.display = tests.style.display === "none" ? "" : "none";
+            })
+
+            tableBody.appendChild(main)
+            tableBody.appendChild(tests)
+
+            return [main, tests];
+        }
+
+        function AddTest(categoryTestsEntry, name, device, duration, result) {
+            const testEntry = document.createElement("tr");
+            testEntry.style.backgroundColor = result ? "#6eb96c80" : "#d9454480";
+            testEntry.innerHTML = `
+                <td>${name}</td>
+                <td>${device}</td>
+                <td>${duration.toFixed(4)}ms</td>
+                <td>${result ? "Passed" : "Failed"}</td>
+            `
+            categoryTestsEntry.querySelector("tbody").appendChild(testEntry);
+            return testEntry;
+        }
+
+        function UpdateCategory(categoryEntry, duration, passed, failed) {
+            const durationElement = categoryEntry.querySelector("[data-id=duration]");
+            const passedElement = categoryEntry.querySelector("[data-id=passed]");
+            const failedElement = categoryEntry.querySelector("[data-id=failed]");
+
+            durationElement.textContent = duration.toFixed(4) + "ms";
+            passedElement.textContent = passed;
+            failedElement.textContent = failed;
+
+            categoryEntry.style.backgroundColor = failed === 0 ? "#6eb96c80" : "#d9454480";
+        }
+
+        function getCategory(tableBody, category) {
+            const categoryId = hashCode(category);
+            const categoryEntryElement = document.getElementById(`category-${categoryId}`);
+            if (!categoryEntryElement) {
+                return AddCategory(tableBody, category);
+            }
+
+            const categoryTestsEntryElement = document.getElementById(`tests-${categoryId}`);
+
+            return [categoryEntryElement, categoryTestsEntryElement];
+        }
+
+        const tableBody = document.getElementById("tests-table-body");
+
+        function run() {
+            const tests = TestRunner.UnitTests;
+            for (let test of tests) {
+                const category = test.category;
+                const func = test.func;
+
+                const [categoryEntry, categoryTestsEntry] = getCategory(tableBody, category);
+
+                let stats = {
+                    time: 0,
+                    passed: 0,
+                    failed: 0
+                };
+
+                for (let deviceName of Object.keys(Device)) {
+                    if (!isNaN(deviceName)) continue;
+
+                    const deviceId = Device[deviceName];
+
+                    TestRunner.describe = (name, func) => {
+                        try {
+                            const st = performance.now();
+                            func();
+                            const e = performance.now() - st;
+                            AddTest(categoryTestsEntry, name, Device[deviceId], e, true);
+                            stats.time += e;
+                            stats.passed++;
+                            return true;
+
+                        } catch (error) {
+                            console.log(`[${category}.${name}] Failed with error:`);
+                            console.error(error);
+                            console.log(``);
+                            AddTest(categoryTestsEntry, name, Device[deviceId], 0, false);
+                            stats.failed++;
+                        }
+                    }
+                    
+                    func(deviceId);
+                }
+             
+                UpdateCategory(categoryEntry, stats.time, stats.passed, stats.failed);
+            }
+        }
+
+        run();
+    </script>
+</body>
+
+</html>

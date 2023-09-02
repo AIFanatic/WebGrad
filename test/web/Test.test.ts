@@ -6,7 +6,7 @@ import { Device } from "../../src/backend/Backend";
 
 function TestTest(device: Device) {
     TestRunner.describe("Softmax", () => {
-        const x = Tensor.arange(0, 11);
+        const x = Tensor.arange(0, 10);
     
         const softmax = new nn.Softmax(0);
         const r = softmax.forward(x);

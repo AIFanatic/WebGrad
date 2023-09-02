@@ -2,9 +2,9 @@ name: Node.js CI
 
 on:
   push:
-    branches: [ matrix ]
+    branches: [ master ]
   pull_request:
-    branches: [ matrix ]
+    branches: [ master ]
 
 jobs:
   build:
@@ -12,17 +12,17 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      matrix:
+      master:
         node-version: [14.x, 16.x]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js ${{ master.node-version }}
       uses: actions/setup-node@v2
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: ${{ master.node-version }}
 
     - name: Install Yarn
       run: npm install -g yarn

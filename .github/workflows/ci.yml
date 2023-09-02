@@ -19,10 +19,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Use Node.js ${{ master.node-version }}
+    - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v2
       with:
-        node-version: ${{ master.node-version }}
+        node-version: ${{ matrix.node-version }}
 
     - name: Install Yarn
       run: npm install -g yarn

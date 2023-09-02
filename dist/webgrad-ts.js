@@ -1196,7 +1196,7 @@ var Tensor = class {
       }
     }
     build_topo(this);
-    this.grad = Backend.CreateFromFloat32Array(this.device, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
+    this.grad = Tensor.ones(this.data.shape, { device: this.device }).data;
     for (let v of topo.reverse()) {
       if (v._op === null)
         continue;
@@ -1876,7 +1876,7 @@ var Pow = class extends Operation {
     return new Tensor(BinaryOp.pow(x.data, y.data), { _children: [x], _op: this });
   }
   backward(grad) {
-    const a = BinaryOp.sub(this.y.data, new Tensor([1]).data);
+    const a = BinaryOp.sub(this.y.data, Tensor.ones(this.y.shape, { device: this.y.device }).data);
     const b = BinaryOp.pow(this.x.data, a);
     const c = BinaryOp.mul(this.y.data, b);
     const d = BinaryOp.mul(c, grad);

@@ -67,6 +67,8 @@ export class Tensor {
         this._op = _options._op;
         this._prev = new Set(_options._children);
         this._children = _options._children;
+
+        // console.warn(_options.device);
     }
 
     public backward() {
@@ -87,7 +89,8 @@ export class Tensor {
         build_topo(this);
 
         // this.grad = Tensor.ones(this.data.shape).data;
-        this.grad = Backend.CreateFromFloat32Array(this.device, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
+        // this.grad = Backend.CreateFromFloat32Array(this.device, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
+        this.grad = Tensor.ones(this.data.shape, {device: this.device}).data;
 
         for (let v of topo.reverse()) {
             if (v._op === null) continue;
@@ -96,7 +99,6 @@ export class Tensor {
                 for (let i = 0; i < grads.length; i++) {
                     if (grads[i] !== null) {
                         if (v._children[i].grad) {
-                            // v._children[i].grad = v._children[i].grad.add(grads[i]); // accumulate gradients
                             v._children[i].grad = BinaryOp.add(v._children[i].grad, grads[i]); // accumulate gradients
                         } else {
                             v._children[i].grad = grads[i];

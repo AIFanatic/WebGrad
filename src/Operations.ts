@@ -54,7 +54,7 @@ export class Pow extends Operation {
     }
 
     public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
-        const a = BinaryOp.sub(this.y.data, new Tensor([1]).data);
+        const a = BinaryOp.sub(this.y.data, Tensor.ones(this.y.shape, {device: this.y.device}).data);
         const b = BinaryOp.pow(this.x.data, a);
         const c = BinaryOp.mul(this.y.data, b);
         const d = BinaryOp.mul(c, grad);

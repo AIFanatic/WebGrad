@@ -2697,9 +2697,9 @@ function TensorGradTest(device) {
     const b = new Tensor([0, 2, 2], { device, requires_grad: true });
     const c = a.eq(b);
     c.backward();
-    console.log(`a ${a}`);
-    console.log(`b ${b}`);
-    console.log(`c ${c}`);
+    assert(equal(a, TensorFactory({ data: [1, 2, 3], grad: [0, 0, 0] })));
+    assert(equal(b, TensorFactory({ data: [0, 2, 2], grad: [0, 0, 0] })));
+    assert(equal(c, TensorFactory({ data: [0, 1, 0], grad: [1, 1, 1] })));
   });
 }
 var TensorGradTests = { category: "Tensor Grad", func: TensorGradTest };

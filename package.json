@@ -12,7 +12,7 @@
     "build:types": "tsc --emitDeclarationOnly",
     "build": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm",
     "dev": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm --watch",
-    "test": "esr ./test/run.ts"
+    "test-node": "esr ./test/run-node.ts"
   },
   "devDependencies": {
     "@types/node": "^20.5.6",

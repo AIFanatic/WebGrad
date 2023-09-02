@@ -175,6 +175,24 @@ describe("Transpose", () => {
     assert(equal(c, TensorFactory({data: [[1, 3, 5], [2, 4, 6]], grad: [[1, 1, 1], [1, 1, 1]]})));
 })
 
+describe("Abs", () => {
+    const a = new Tensor([[-3, 3, 3], [4, -4, 4]]);
+    const b = a.abs();
+
+    b.backward();
+
+    assert(equal(a, TensorFactory({data: [[-3, 3, 3], [4, -4, 4]], grad: [[-1, 1, 1], [1, -1, 1]]})));
+    assert(equal(b, TensorFactory({data: [[3, 3, 3], [4, 4, 4]], grad: [[1, 1, 1], [1, 1, 1]]})));
+})
+
+describe("Log", () => {
+    const a = new Tensor([[1, 2, 3], [4, 5, 6]]);
+    const b = a.log();
+    b.backward()
+    assert(equal(a, TensorFactory({data: [[1, 2, 3], [4, 5, 6]], grad: [[1.0000, 0.5000, 0.3333], [0.2500, 0.2000, 0.1667]]}), 1e-4));
+    assert(equal(b, TensorFactory({data: [[0.0000, 0.6931, 1.0986], [1.3863, 1.6094, 1.7918]], grad: [[1, 1, 1], [1, 1, 1]]}), 1e-4));
+})
+
 describe("Simple model", () => {
     const weight = new Tensor([[-0.4869, -0.0896], [-0.0051, -0.3460], [ 0.1421, -0.5443]], {requires_grad: true});
 
@@ -187,6 +205,31 @@ describe("Simple model", () => {
     loss.backward();
     assert(equal(weight, TensorFactory({data: [[-0.4869, -0.0896], [-0.0051, -0.3460], [ 0.1421, -0.5443]], grad: [[2, 2], [3, 3], [-1, -1]]})));
 });
+
+describe("Maximum", () => {
+    const a = new Tensor([2, 3, 4]);
+    const b = new Tensor([1, 5, 2]);
+    const c = a.maximum(b);
+
+    c.backward();
+
+    assert(equal(a, TensorFactory({data: [2, 3, 4], grad: [1, 0, 1]})));
+    assert(equal(b, TensorFactory({data: [1, 5, 2], grad: [0, 1, 0]})));
+    assert(equal(c, TensorFactory({data: [2, 5, 4], grad: [1, 1, 1]})));
+})
+
+describe("Equal", () => {
+    const a = new Tensor([1, 2, 3]);
+    const b = new Tensor([0, 2, 2]);
+    const c = a.eq(b);
+
+    c.backward();
+
+    console.log(`a ${a}`);
+    console.log(`b ${b}`);
+    console.log(`c ${c}`);
+    // assert(equal(c, new Tensor([0, 1, 0])));
+})
 
 // describe("Simple model more ops", () => {
 //     const weight = new Tensor([[-0.4869, -0.0051,  0.1421],[-0.0896, -0.3460, -0.5443],[ 0.0983,  0.2271, -0.3740],[-0.2777,  0.2408,  0.0935]], {device: device,);

@@ -97,6 +97,21 @@ export class Sum extends Operation {
     }
 }
 
+export class Log extends Operation {
+    private x: Tensor;
+    public forward(x: Tensor): Tensor {
+        this.x = x;
+        return new Tensor(UnaryOp.log(x.data), {_children: [x], _op: this});
+    }
+
+    public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
+        return [
+            BinaryOp.div(grad, this.x.data),
+            null
+        ];
+    }
+}
+
 export class Exp extends Operation {
     private out: Tensor;
     public forward(x: Tensor): Tensor {
@@ -244,6 +259,6 @@ export class Equal extends Operation {
     }
 
     public backward(grad: TensorBuffer): [TensorBuffer, TensorBuffer] {
-        return [grad, null];
+        return [null, null];
     }
 }

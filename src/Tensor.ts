@@ -255,6 +255,14 @@ export class Tensor {
     }
 
     // UnaryOps
+    public abs(): Tensor {
+        return this.relu().add(this.mul(-1).relu())
+    }
+
+    public log(): Tensor {
+        return new Operations.Log().forward(this);
+    }
+
     public masked_fill(mask: Tensor, value: number): Tensor {
         const [mb, maskb] = this.broadcast(mask);
 
@@ -348,6 +356,11 @@ export class Tensor {
         const outShapeLen = out.shape.reduce((p, c) => p * c);
         const thisShapeLen = this.shape.reduce((p, c) => p * c);
         return out.mul(outShapeLen/thisShapeLen);
+    }
+
+    public var(axis: number | null = null, keepdims: boolean = false): Tensor {
+        const x = this.sub(this.mean(axis, true)).abs().pow(2);
+        return x.mean(axis, keepdims);
     }
 
     public reshape(shape: number | number[]): Tensor {

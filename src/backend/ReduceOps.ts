@@ -36,6 +36,26 @@ export class ReduceOp {
         return res;
     }
 
+    private static combineLocations(outputLoc: number[], reduceLoc: number[], axes: number[]): number[] {
+        const rank = outputLoc.length + reduceLoc.length;
+        const loc = [];
+        let outIdx = 0;
+        let reduceIdx = 0;
+        for (let dim = 0; dim < rank; dim++) {
+            if (axes.indexOf(dim) === -1) {
+                loc.push(outputLoc[outIdx++]);
+            } else {
+                loc.push(reduceLoc[reduceIdx++]);
+            }
+        }
+        return loc;
+    }
+
+    private static expandShapeToKeepDim(shape: number[], axes: number[]): number[] {
+        const reduceSubShape = axes.map(x => 1);
+        return ReduceOp.combineLocations(shape, reduceSubShape, axes);
+    }
+
     private static reduce_op(x: TensorBuffer, op: ReduceOps, axis: number[] | number | null, keepdim: boolean): TensorBuffer {
         const origAxes = ReduceOp.parseAxisParam(axis, x.shape);
         let axes = origAxes;
@@ -49,17 +69,15 @@ export class ReduceOp {
             input = MovementOp.contiguous(input);
         }
 
-        const resultShape = [...x.shape];
-        resultShape.splice(axes[axes.length-1], 1);
-
-        if (keepdim === true) {
-            resultShape.splice(axes[axes.length-1], 0, 1);
-        }
-        
-        const r = input.reduce_op(op, axes, x.shape, resultShape);
+        const r = input.reduce_op(op, axes, x.shape, []);
         
         if (keepdim) {
-            return MovementOp.reshape(r, resultShape);
+            let shape = r.shape.length === 1 && r.shape[0] === 1 ? [] : r.shape;
+            let newShape = ReduceOp.expandShapeToKeepDim(shape, origAxes);
+            if (newShape.length === 1 && newShape[0] === undefined) newShape = [r.shape.reduce((p, c) => p * c)];
+            // console.log(`newShape`, newShape)
+
+            return MovementOp.reshape(r, newShape);
         }
         return r;
     }

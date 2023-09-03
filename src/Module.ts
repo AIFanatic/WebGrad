@@ -1,4 +1,5 @@
 import { Tensor } from "./Tensor";
+import { Device } from "./backend/Backend";
 
 export type StateDict = { [key: string]: number[][] };
 export type NameParametersDict = { [key: string]: Tensor };
@@ -161,5 +162,10 @@ export class Module {
         }
     }
 
-
+    public to<T extends Module>(this: T, device: Device): T {
+        for (let parameter of this.parameters()) {
+            parameter.assign(parameter.to(device));
+        }
+        return this;
+    }
 }

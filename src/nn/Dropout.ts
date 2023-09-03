@@ -1,20 +1,16 @@
 import { Module } from "../Module";
 import { Tensor } from "../Tensor";
 
-// TODO: Enable dropout when training
 export class Dropout extends Module {
-    private pScalar: number;
-    private p: Tensor;
+    private p: number; // probability of an element to be zeroed.
 
-    // p = probability of an element to be zeroed.
     constructor(p: number = 0.5) {
         super();
-        this.pScalar = p;
-        this.p = new Tensor(p);
+        this.p = p;
     }
         
     public forward(x: Tensor): Tensor {
-        if (this.pScalar === 0) return x;
+        if (this.p === 0) return x;
         const mask = Tensor.rand(x.shape).gte(this.p).reshape(x.shape);
         return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
     }
@@ -24,6 +20,6 @@ export class Dropout extends Module {
     }
 
     public toString(): string {
-        return `Dropout(p=${this.pScalar.toFixed(2)})`;
+        return `Dropout(p=${this.p.toFixed(2)})`;
     }
 }

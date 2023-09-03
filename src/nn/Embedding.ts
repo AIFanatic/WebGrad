@@ -21,7 +21,7 @@ export class Embedding extends Module {
     }
 
     public forward(x: Tensor): Tensor {
-        const va = Tensor.arange(0, this.num_embeddings);
+        const va = Tensor.arange(0, this.num_embeddings, 1, {device: x.device});
         const vb = va.reshape([1,1,this.num_embeddings]);
         const vc = vb.expand([...x.shape, this.num_embeddings]);
         const vocab_counter = vc;

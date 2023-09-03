@@ -594,8 +594,8 @@ export class WEBGLBuffer extends TensorBuffer {
             else if (op === BinaryOps.SUB) return "t1 - t2";
             else if (op === BinaryOps.MUL) return "t1 * t2";
             else if (op === BinaryOps.DIV) return "t1 / t2";
-            else if (op === BinaryOps.POW) return "pow(t1, t2)";
-            else if (op === BinaryOps.CMPEQ) return "vec4(t1.r == t2.r, t1.g == t2.g, t1.b == t2.b, t1.a == t2.a)";
+            else if (op === BinaryOps.POW) return "myPow(t1, t2)";
+            else if (op === BinaryOps.CMPEQ) return "vec4(t1.r == t2.r, t1.g == t2.g, t1.b == t2.b, t1.a == t2.a)"; // Probably needs epsilon
             else if (op === BinaryOps.MAX) return "max(t1, t2)";
         }
 
@@ -604,12 +604,24 @@ export class WEBGLBuffer extends TensorBuffer {
         const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
 
         WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
         uniform sampler2D u_tex1;
 
         out vec4 result;
+
+        // Pow behaves differently in WEBGL, pow(-2, 3) = 8 instead of -8
+        // This still doesn't work for cases where the base is negative and exponent is fractional,
+        // this should return 0 to match js
+        vec4 myPow(vec4 base, vec4 exponent) {
+            vec4 absBase = abs(base); // Absolute value of base
+            vec4 rawPow = pow(absBase, exponent); // Compute pow using absolute values
+            vec4 isOdd = mod(exponent, 2.0); // Check if exponents are odd
+            vec4 signBase = sign(base); // Get the sign of each base component
+            return mix(rawPow, signBase * rawPow, isOdd); // Mix based on odd/even exponent
+        }
 
         void main() {
             ivec2 coords = ivec2(gl_FragCoord.xy);

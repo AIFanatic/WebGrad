@@ -1,3 +1,5 @@
+import { NNTests } from "./web/NN.test";
+import { NetworkTests } from "./web/Network.test";
 import { SumTests } from "./web/Sum.test";
 import { TensorGradTests } from "./web/Tensor.Grad.test";
 import { TensorTests } from "./web/Tensor.test";
@@ -13,5 +15,7 @@ export class TestRunner {
         // SumTests
         TensorTests,
         TensorGradTests,
+        NNTests,
+        NetworkTests
     ]
 }

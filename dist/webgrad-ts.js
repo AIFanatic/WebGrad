@@ -870,7 +870,7 @@ var WEBGLBuffer = class extends TensorBuffer {
       else if (op2 === 3 /* DIV */)
         return "t1 / t2";
       else if (op2 === 4 /* POW */)
-        return "pow(t1, t2)";
+        return "myPow(t1, t2)";
       else if (op2 === 5 /* CMPEQ */)
         return "vec4(t1.r == t2.r, t1.g == t2.g, t1.b == t2.b, t1.a == t2.a)";
       else if (op2 === 6 /* MAX */)
@@ -880,12 +880,24 @@ var WEBGLBuffer = class extends TensorBuffer {
     const inputTextureY = other.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
         uniform sampler2D u_tex1;
 
         out vec4 result;
+
+        // Pow behaves differently in WEBGL, pow(-2, 3) = 8 instead of -8
+        // This still doesn't work for cases where the base is negative and exponent is fractional,
+        // this should return 0 to match js
+        vec4 myPow(vec4 base, vec4 exponent) {
+            vec4 absBase = abs(base); // Absolute value of base
+            vec4 rawPow = pow(absBase, exponent); // Compute pow using absolute values
+            vec4 isOdd = mod(exponent, 2.0); // Check if exponents are odd
+            vec4 signBase = sign(base); // Get the sign of each base component
+            return mix(rawPow, signBase * rawPow, isOdd); // Mix based on odd/even exponent
+        }
 
         void main() {
             ivec2 coords = ivec2(gl_FragCoord.xy);
@@ -1160,7 +1172,6 @@ var Tensor = class {
     this.id = "P" + Math.floor(Math.random() * 1e6).toString().padStart(6, "0");
     const _options = Object.assign({}, DefaultTensorOptions, options);
     if (_options._children.length !== 0) {
-      _options.device = _options._children[0].device;
       _options.requires_grad = _options._children[0].requires_grad;
     }
     if (data instanceof Tensor) {
@@ -1181,11 +1192,11 @@ var Tensor = class {
     this._op = _options._op;
     this._prev = new Set(_options._children);
     this._children = _options._children;
+    this.options = _options;
   }
   backward() {
     let topo = [];
     let visited = /* @__PURE__ */ new Set();
-    const thisShape = this.shape.slice();
     function build_topo(v) {
       if (!visited.has(v)) {
         visited.add(v);
@@ -1456,7 +1467,7 @@ var Tensor = class {
     return new Operations_exports.Transpose().forward(this, dim0, dim1);
   }
   zero_grad() {
-    this.grad = Tensor.zeros(this.data.shape).data;
+    this.grad = Tensor.zeros(this.data.shape, { device: this.device, requires_grad: this.requires_grad }).data;
   }
   __neg__() {
     return this.mul(this.mul(-1));
@@ -1476,13 +1487,6 @@ var Tensor = class {
   }
   toString() {
     return `Tensor(data=${this.data}, grad=${this.grad})`;
-  }
-  assign(other) {
-    this.data = other.data.copy();
-    return this;
-  }
-  copy() {
-    return new Tensor(this.data.copy());
   }
   // New ops
   maximum(other) {
@@ -1519,6 +1523,17 @@ var Tensor = class {
     if (dim < 0)
       dim = this.shape.length + dim + 1;
     return this.reshape([...this.shape.slice(0, dim), 1, ...this.shape.slice(dim)]);
+  }
+  assign(tensor) {
+    this.data = new Tensor(tensor.data.getData(), tensor.options).data;
+    this.grad = new Tensor(tensor.grad.getData(), tensor.options).data;
+    this.options = Object.assign({}, tensor.options);
+    return this;
+  }
+  to(device) {
+    this.device = device;
+    this.options.device = device;
+    return this.assign(this);
   }
 };
 
@@ -1646,6 +1661,12 @@ var Module = class {
       namedParameters[path].assign(t);
     }
   }
+  to(device) {
+    for (let parameter of this.parameters()) {
+      parameter.assign(parameter.to(device));
+    }
+    return this;
+  }
 };
 
 // src/Random.ts
@@ -1717,14 +1738,13 @@ var Linear = class extends Module {
 
 // src/nn/Dropout.ts
 var Dropout = class extends Module {
-  // p = probability of an element to be zeroed.
+  // probability of an element to be zeroed.
   constructor(p = 0.5) {
     super();
-    this.pScalar = p;
-    this.p = new Tensor(p);
+    this.p = p;
   }
   forward(x) {
-    if (this.pScalar === 0)
+    if (this.p === 0)
       return x;
     const mask = Tensor.rand(x.shape).gte(this.p).reshape(x.shape);
     return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
@@ -1733,7 +1753,7 @@ var Dropout = class extends Module {
     return [];
   }
   toString() {
-    return `Dropout(p=${this.pScalar.toFixed(2)})`;
+    return `Dropout(p=${this.p.toFixed(2)})`;
   }
 };
 
@@ -1801,7 +1821,7 @@ var Embedding = class extends Module {
     return [data[0][0][0], data[0][0][1], data[0][0][2]];
   }
   forward(x) {
-    const va = Tensor.arange(0, this.num_embeddings);
+    const va = Tensor.arange(0, this.num_embeddings, 1, { device: x.device });
     const vb = va.reshape([1, 1, this.num_embeddings]);
     const vc = vb.expand([...x.shape, this.num_embeddings]);
     const vocab_counter = vc;

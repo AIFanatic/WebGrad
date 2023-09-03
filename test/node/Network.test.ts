@@ -101,7 +101,7 @@ describe("3 dense layers", () => {
     }
     
 
-    const X = new Tensor([
+    const Xb = new Tensor([
         [2.0, 3.0, -1.0],
         [3.0, -1.0, 0.5],
         [0.5, 1.0, 1.0],
@@ -109,6 +109,7 @@ describe("3 dense layers", () => {
     ], {requires_grad: true});
 
     const Y = new Tensor([1.0, 0.2, 0.3, 0.7], {requires_grad: true});
+    const Yb = Y.reshape([Y.shape[0], 1]);
 
     const model = new SimpleModel(3, 2);
 
@@ -125,9 +126,6 @@ describe("3 dense layers", () => {
     let last_loss;
     const epochs = 100;
     for (let k = 0; k < epochs; k++) {
-        const Xb = new Tensor(X, {requires_grad: true});
-        const Yb = new Tensor(Y.reshape([Y.shape[0], 1]), {requires_grad: true});
-        
         const total_loss = get_loss(model, Xb, Yb);
         model.zero_grad();
         total_loss.backward();
@@ -137,7 +135,7 @@ describe("3 dense layers", () => {
             p.data = p.sub(new Tensor(p.grad).mul(learning_rate)).data;
         }
 
-        const total_loss2 = get_loss(model, new Tensor(X), new Tensor(Y.reshape([Y.shape[0], 1])));
+        const total_loss2 = get_loss(model, Xb, Yb);
 
         last_loss = total_loss2;
     }

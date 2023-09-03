@@ -12,7 +12,6 @@ describe("Linear", () => {
     const input = new Tensor([[1,2], [3,4]]);
     const out = linear.forward(input);
 
-    console.log(`linear out ${out}`);
     assert(`${linear}` === `Linear(in_features=2, out_features=4)`);
     assert(equal(out, TensorFactory({data: [[-1.0668, -0.3854, -1.4619, 0.7911], [-2.2719, -0.2566, -3.6425, 1.5882]], grad: [[0,0,0,0],[0,0,0,0]]}), 1e-3));
 })
@@ -32,13 +31,14 @@ describe("Sequential", () => {
 })
 
 describe("Dropout", () => {
+    Random.SetRandomSeed(1337);
     let x = new Tensor([[0.0090, 0.0000, 0.1623, 0.0000, 0.0000, 0.4064, 0.0000, 0.0000, 0.1924,
         0.0000, 0.0000, 0.0542, 0.0000, 0.4154, 0.0000, 0.2993, 0.0000, 0.3429,
         0.3209, 0.0082]]);
 
     const dropout = new nn.Dropout();
     x = dropout.forward(x);
-    assert(equal(x, TensorFactory({data: [[0.018,0,0.3246,0,0,0.8128,0,0,0,0,0,0.1084,0,0.8308,0,0,0,0,0,0.0164]], grad: [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]})));
+    assert(equal(x, TensorFactory({data: [[0,0,0.3246,0,0,0.8128,0,0,0,0,0,0.1084,0,0.8308,0,0.5986,0,0,0.6418,0]], grad: [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]})));
 })
 
 describe("LayerNorm", () => {

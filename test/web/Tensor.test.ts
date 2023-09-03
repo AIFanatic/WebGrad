@@ -9,17 +9,27 @@ Random.SetRandomSeed(1337);
 
 function TensorTest(device: Device) {
     TestRunner.describe("Tensor creation", () => {
-        const a = new Tensor([[1, 2], [3, 4]], {device: device}); // Compute shape
+        const a = new Tensor([[1, 2], [3, 4]], {device: device});
         assert(equal(a, new Tensor([[1, 2], [3, 4]])));
         assert(equal(a.shape, [2,2]));
     
-        const b = new Tensor([1, 2, 3, 4, 5, 6], {device: device}); // 1D
+        const b = new Tensor([1, 2, 3, 4, 5, 6], {device: device});
         assert(equal(b, new Tensor([1, 2, 3, 4, 5, 6])));
         assert(equal(b.shape, [6]));
     
-        const c = new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], {device: device}); // 3D
+        const c = new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], {device: device});
         assert(equal(c, new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])));
         assert(equal(c.shape, [2, 2, 2]));
+    })
+
+    TestRunner.describe("Tensor to", () => {
+        const a = new Tensor([[1, 2], [3, 4]], {device: device});
+        assert(a.device === device);
+
+        // Only works because only two devices
+        const otherDevice = device === Device.CPU ? Device.WEBGL : Device.CPU;
+        const b = a.to(otherDevice);
+        assert(b.device === otherDevice);
     })
     
     TestRunner.describe("Zeros", () => {
@@ -141,6 +151,22 @@ function TensorTest(device: Device) {
         assert(equal(i.shape, [2, 3]));
     })
     
+    TestRunner.describe("Negative pow", () => {
+        const a = new Tensor([-2, 2, -2], {device: device});
+        const b = new Tensor([2, 2, 2], {device: device});
+        const c = a.pow(b);
+        assert(equal(c, new Tensor([4, 4, 4])));
+
+        const d = new Tensor([3, 3, 3], {device: device});
+        const e = a.pow(d);
+        assert(equal(e, new Tensor([-8, 8, -8])));
+
+        // // TODO: Fix
+        // const f = new Tensor([0.1, 1, 1], {device: device});
+        // const g = a.pow(f);
+        // assert(equal(g, new Tensor([0, 2, -2])));
+    })
+
     TestRunner.describe("Binary Ops scalars", () => {
         const a = new Tensor([[1, 1, 1], [2, 2, 2]], {device: device});
         const b = a.add(10);
@@ -243,7 +269,6 @@ function TensorTest(device: Device) {
         const c = new Tensor([[0, 1], [0, 5]], {device: device});
     
         const d = a.sum();
-        console.log(`d ${d}`)
         assert(equal(d, new Tensor([2])));
         assert(equal(d.shape, [1]));
     
@@ -269,7 +294,6 @@ function TensorTest(device: Device) {
     
         assert(equal(i.sum(null, true), new Tensor([[6]])));
     
-        console.log(`t ${i.sum(0, true)}`);
         assert(equal(i.sum(0, true), new Tensor([[2, 4, 0]])));
         assert(equal(i.sum(0, false), new Tensor([2, 4, 0])));
     

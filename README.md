@@ -9,3 +9,6 @@
 * Multinomial and cat (./test/networks/GPT2) should be tensor methods and use Tensor ops instead of working on the data
 * Figure out a way for rand on webgl to match cpu
 * Get all webgl tests to pass ./dist/test/index.html.
+* Probably device come from TensorBuffer and not Tensor (From TensorBuffer is more reliable and can't be faked)
+* Test tensor assign (probably it should copy stuff instead of assigning by reference)
+* WEBGL reduce_op needs a reshape for the resulting shape, analyse ways around not using any more ops there

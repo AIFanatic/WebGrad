@@ -18,12 +18,8 @@ export class BinaryOp {
             throw Error(`Cannot perform binary op since TensorBuffer 1 is on ${Device[x.device]} and TensorBuffer 2 is on ${Device[y.device]}`);
         }
 
-        // console.log("x contiguous", x.is_contiguous(), x.data.data, x.shape, x.strides);
-        // console.log("y contiguous", y.is_contiguous(), y.data.data, y.shape, y.strides)
         if (!x.is_contiguous()) x = MovementOp.contiguous(x);
         if (!y.is_contiguous()) y = MovementOp.contiguous(y);
-        // x = MovementOp.contiguous(x);
-        // y = MovementOp.contiguous(y);
 
         return x.binary_op(y, op);
     }

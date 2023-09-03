@@ -22,6 +22,8 @@ const DefaultTensorOptions: TensorOptions = {
 };
 
 export class Tensor {
+    public id: string;
+
     public data: TensorBuffer;
     public grad: TensorBuffer;
     public _children: Tensor[];
@@ -29,8 +31,7 @@ export class Tensor {
     public _op: Operation;
     public device: Device;
     public requires_grad: boolean;
-
-    public id: string;
+    private options: TensorOptions;
 
     public get shape(): number[] { return this.data.shape; }
     public get strides(): number[] { return this.data.strides; }
@@ -42,7 +43,7 @@ export class Tensor {
         const _options: TensorOptions = Object.assign({}, DefaultTensorOptions, options);
 
         if (_options._children.length !== 0) {
-            _options.device = _options._children[0].device;
+            // _options.device = _options._children[0].device;
             _options.requires_grad = _options._children[0].requires_grad;
         }
 
@@ -68,6 +69,7 @@ export class Tensor {
         this._prev = new Set(_options._children);
         this._children = _options._children;
 
+        this.options = _options;
         // console.warn(_options.device);
     }
 
@@ -75,7 +77,6 @@ export class Tensor {
         let topo: Tensor[] = [];
         let visited = new Set<Tensor>();
 
-        const thisShape = this.shape.slice();
         function build_topo(v: Tensor) {
             if (!visited.has(v)) {
                 visited.add(v);
@@ -88,8 +89,6 @@ export class Tensor {
 
         build_topo(this);
 
-        // this.grad = Tensor.ones(this.data.shape).data;
-        // this.grad = Backend.CreateFromFloat32Array(this.device, new Float32Array([1]), this.shape, TensorBuffer.computeStrides(this.shape));
         this.grad = Tensor.ones(this.data.shape, {device: this.device}).data;
 
         for (let v of topo.reverse()) {
@@ -99,7 +98,7 @@ export class Tensor {
                 for (let i = 0; i < grads.length; i++) {
                     if (grads[i] !== null) {
                         if (v._children[i].grad) {
-                            v._children[i].grad = BinaryOp.add(v._children[i].grad, grads[i]); // accumulate gradients
+                            v._children[i].grad = BinaryOp.add(v._children[i].grad, grads[i]);
                         } else {
                             v._children[i].grad = grads[i];
                         }
@@ -401,7 +400,7 @@ export class Tensor {
     }
 
     public zero_grad() {
-        this.grad = Tensor.zeros(this.data.shape).data;
+        this.grad = Tensor.zeros(this.data.shape, {device: this.device, requires_grad: this.requires_grad}).data;
     }
 
     public __neg__() {
@@ -427,15 +426,6 @@ export class Tensor {
 
     public toString() {
         return `Tensor(data=${this.data}, grad=${this.grad})`;
-    }
-
-    public assign(other: Tensor): Tensor {
-        this.data = other.data.copy();
-        return this;
-    }
-
-    public copy(): Tensor {
-        return new Tensor(this.data.copy());
     }
 
 
@@ -479,5 +469,18 @@ export class Tensor {
     public unsqueeze(dim: number): Tensor {
         if (dim < 0) dim = this.shape.length + dim + 1;
         return this.reshape([...this.shape.slice(0, dim), 1, ...this.shape.slice(dim)]);
+    }
+
+    public assign(tensor: Tensor): Tensor {
+        this.data = new Tensor(tensor.data.getData(), tensor.options).data;
+        this.grad = new Tensor(tensor.grad.getData(), tensor.options).data;
+        this.options = Object.assign({}, tensor.options);
+        return this;
+    }
+
+    public to(device: Device): Tensor {
+        this.device = device;
+        this.options.device = device;
+        return this.assign(this);
     }
 }

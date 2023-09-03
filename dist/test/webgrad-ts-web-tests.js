@@ -705,6 +705,138 @@ var Matrix = class {
   }
 };
 
+// src/Module.ts
+var Module = class {
+  constructor() {
+    this._total_params = 0;
+  }
+  forward(x) {
+    throw Error("Not implemented");
+  }
+  zero_grad() {
+    for (let p of this.parameters()) {
+      p.zero_grad();
+    }
+  }
+  get total_params() {
+    return this._total_params;
+  }
+  named_parameters(prefix = "") {
+    let result = {};
+    for (let key of Object.keys(this)) {
+      let fullPath = prefix + key;
+      if (this[key] instanceof Module) {
+        let childParameters = this[key].named_parameters(fullPath + ".");
+        for (let childKey in childParameters) {
+          result[childKey] = childParameters[childKey];
+        }
+      } else if (Array.isArray(this[key])) {
+        this[key].forEach((item, index) => {
+          if (item instanceof Module) {
+            let childParameters = item.named_parameters(fullPath + "." + index + ".");
+            for (let childKey in childParameters) {
+              result[childKey] = childParameters[childKey];
+            }
+          } else if (item instanceof Tensor) {
+            result[`${fullPath}[${index}]`] = item;
+          }
+        });
+      } else if (this[key] instanceof Tensor) {
+        result[fullPath] = this[key];
+      }
+    }
+    return result;
+  }
+  parameters() {
+    let params = [];
+    const keys = Object.keys(this);
+    for (let key of keys) {
+      const property = this[key];
+      if (property instanceof Module) {
+        const module = property;
+        params.push(...module.parameters());
+      } else if (property instanceof Array) {
+        for (let ak of property) {
+          if (ak instanceof Module) {
+            const module = ak;
+            params.push(...module.parameters());
+          }
+        }
+      }
+    }
+    this._total_params = params.length;
+    return params;
+  }
+  get_name() {
+    return this.constructor.name;
+  }
+  toString() {
+    function _addindent(s_, numSpaces) {
+      let s = s_.split("\n");
+      if (s.length == 1) {
+        return s_;
+      }
+      const first = s.shift();
+      s = s.map((line) => new Array(numSpaces).fill(" ").join("") + line);
+      let str = "";
+      for (let line of s) {
+        str += "\n" + line;
+      }
+      str = first + str;
+      return str;
+    }
+    let child_lines = [];
+    const keys = Object.keys(this);
+    for (let key of keys) {
+      if (this[key] instanceof Module || this[key]["parameters"]) {
+        const module = this[key];
+        let mod_str = `${module}`;
+        mod_str = _addindent(mod_str, 2);
+        child_lines.push("(" + key + "): " + mod_str);
+      } else if (this[key] instanceof Array && key !== "layers") {
+        for (let ak of this[key]) {
+          const module = ak;
+          let mod_str = `${module}`;
+          mod_str = _addindent(mod_str, 2);
+          child_lines.push("(" + key + "): " + mod_str);
+        }
+      }
+    }
+    const lines = child_lines;
+    let main_str = this.get_name() + "(";
+    if (lines) {
+      main_str += "\n  ";
+      for (let line of lines) {
+        main_str += line + "\n  ";
+      }
+    }
+    main_str += ")";
+    return main_str;
+  }
+  load_state_dict(stateDict) {
+    const namedParameters = this.named_parameters();
+    const entries = Object.entries(stateDict);
+    for (let state of entries) {
+      const path = state[0];
+      const tensor = state[1];
+      if (!namedParameters[path])
+        throw Error(`Layer ${path} not found`);
+      const t = new Tensor(tensor);
+      const stateTensorShape = t.shape.reduce((p, c) => p * c);
+      const modelParameterShape = namedParameters[path].shape.reduce((p, c) => p * c);
+      if (stateTensorShape != modelParameterShape)
+        throw Error(`State tensor shape (${stateTensorShape}) doesn't match model tensor shape (${modelParameterShape})`);
+      namedParameters[path].assign(t);
+    }
+  }
+  to(device) {
+    for (let parameter of this.parameters()) {
+      parameter.assign(parameter.to(device));
+    }
+    return this;
+  }
+};
+
 // src/backend/TensorBuffer.ts
 var TensorBuffer = class {
   constructor(shape, strides, offset, device) {
@@ -1571,7 +1703,7 @@ var WEBGLBuffer = class extends TensorBuffer {
       else if (op2 === 3 /* DIV */)
         return "t1 / t2";
       else if (op2 === 4 /* POW */)
-        return "pow(t1, t2)";
+        return "myPow(t1, t2)";
       else if (op2 === 5 /* CMPEQ */)
         return "vec4(t1.r == t2.r, t1.g == t2.g, t1.b == t2.b, t1.a == t2.a)";
       else if (op2 === 6 /* MAX */)
@@ -1581,12 +1713,24 @@ var WEBGLBuffer = class extends TensorBuffer {
     const inputTextureY = other.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
         uniform sampler2D u_tex1;
 
         out vec4 result;
+
+        // Pow behaves differently in WEBGL, pow(-2, 3) = 8 instead of -8
+        // This still doesn't work for cases where the base is negative and exponent is fractional,
+        // this should return 0 to match js
+        vec4 myPow(vec4 base, vec4 exponent) {
+            vec4 absBase = abs(base); // Absolute value of base
+            vec4 rawPow = pow(absBase, exponent); // Compute pow using absolute values
+            vec4 isOdd = mod(exponent, 2.0); // Check if exponents are odd
+            vec4 signBase = sign(base); // Get the sign of each base component
+            return mix(rawPow, signBase * rawPow, isOdd); // Mix based on odd/even exponent
+        }
 
         void main() {
             ivec2 coords = ivec2(gl_FragCoord.xy);
@@ -1804,10 +1948,10 @@ var WEBGLBuffer = class extends TensorBuffer {
 };
 
 // src/backend/Backend.ts
-var Device = /* @__PURE__ */ ((Device2) => {
-  Device2[Device2["CPU"] = 0] = "CPU";
-  Device2[Device2["WEBGL"] = 1] = "WEBGL";
-  return Device2;
+var Device = /* @__PURE__ */ ((Device4) => {
+  Device4[Device4["CPU"] = 0] = "CPU";
+  Device4[Device4["WEBGL"] = 1] = "WEBGL";
+  return Device4;
 })(Device || {});
 var Backend = class {
   static CreateFromArray(device, array) {
@@ -1837,6 +1981,156 @@ var Backend = class {
     else if (data instanceof WEBGLBuffer)
       return new WEBGLBuffer(data, shape, strides, offset);
     throw Error(`Unable to call CreateFromDataShapeAndStrides`);
+  }
+};
+
+// src/nn/index.ts
+var nn_exports = {};
+__export(nn_exports, {
+  Dropout: () => Dropout,
+  Embedding: () => Embedding,
+  LayerNorm: () => LayerNorm,
+  Linear: () => Linear,
+  Sequential: () => Sequential,
+  Softmax: () => Softmax
+});
+
+// src/nn/Sequential.ts
+var Sequential = class extends Module {
+  constructor(...modules) {
+    super();
+    this.modules = modules;
+  }
+  forward(x) {
+    for (let module of this.modules) {
+      x = module.forward(x);
+    }
+    return x;
+  }
+};
+
+// src/nn/Linear.ts
+var Linear = class extends Module {
+  constructor(in_features, out_features) {
+    super();
+    this.weight = Tensor.uniform(-1, 1, [out_features, in_features], { requires_grad: true });
+    this.bias = Tensor.zeros([out_features], { requires_grad: true });
+    this.in_features = in_features;
+    this.out_features = out_features;
+  }
+  forward(x) {
+    const wt = this.weight.permute();
+    x = wt.shape.length === 1 ? x.mul(wt) : x.matmul(wt);
+    return this.bias ? x.add(this.bias) : x;
+  }
+  parameters() {
+    return [this.weight, this.bias];
+  }
+  toString() {
+    return `Linear(in_features=${this.in_features}, out_features=${this.out_features})`;
+  }
+};
+
+// src/nn/Dropout.ts
+var Dropout = class extends Module {
+  // probability of an element to be zeroed.
+  constructor(p = 0.5) {
+    super();
+    this.p = p;
+  }
+  forward(x) {
+    if (this.p === 0)
+      return x;
+    const mask = Tensor.rand(x.shape).gte(this.p).reshape(x.shape);
+    return x.mul(mask).mul(new Tensor(1).div(new Tensor(1).sub(this.p)));
+  }
+  parameters() {
+    return [];
+  }
+  toString() {
+    return `Dropout(p=${this.p.toFixed(2)})`;
+  }
+};
+
+// src/nn/LayerNorm.ts
+var LayerNorm = class extends Module {
+  constructor(normalized_shape, eps = 1e-5, elementwise_affine = true) {
+    super();
+    this.eps = eps;
+    this.elementwise_affine = elementwise_affine;
+    this.weight = Tensor.ones(normalized_shape, { requires_grad: true });
+    this.bias = elementwise_affine ? Tensor.zeros(normalized_shape, { requires_grad: true }) : null;
+  }
+  layernorm(self, axis = -1, eps = 1e-5) {
+    const a = self.mean(axis, true);
+    const y = self.sub(a);
+    const b = y.mul(y);
+    const c = b.mean(axis, true);
+    const d = c.add(eps);
+    const e = d.rsqrt();
+    const f = y.mul(e);
+    return f;
+  }
+  forward(x) {
+    const axis = -1;
+    x = this.layernorm(x, axis, this.eps);
+    if (!this.elementwise_affine)
+      return x;
+    return x.mul(this.weight).add(this.bias);
+  }
+  parameters() {
+    return [this.weight, this.bias];
+  }
+  toString() {
+    return `LayerNorm(eps=${this.eps})`;
+  }
+};
+
+// src/nn/Softmax.ts
+var Softmax = class extends Module {
+  constructor(dim) {
+    super();
+    this.dim = dim;
+  }
+  forward(x) {
+    return x.exp().div(x.exp().sum(this.dim, true));
+  }
+  parameters() {
+    return [];
+  }
+  toString() {
+    return `SoftMax(dim=${this.dim})`;
+  }
+};
+
+// src/nn/Embedding.ts
+var Embedding = class extends Module {
+  constructor(num_embeddings, embedding_dim) {
+    super();
+    this.weight = Tensor.uniform(-1, 1, [num_embeddings, embedding_dim], { requires_grad: true });
+    this.num_embeddings = num_embeddings;
+    this.embedding_dim = embedding_dim;
+  }
+  getFirsts(v) {
+    const data = v.data.getData();
+    return [data[0][0][0], data[0][0][1], data[0][0][2]];
+  }
+  forward(x) {
+    const va = Tensor.arange(0, this.num_embeddings, 1, { device: x.device });
+    const vb = va.reshape([1, 1, this.num_embeddings]);
+    const vc = vb.expand([...x.shape, this.num_embeddings]);
+    const vocab_counter = vc;
+    const a = x.unsqueeze(2);
+    const b = vocab_counter.eq(a);
+    const c = b.expand([...x.shape, this.num_embeddings]);
+    const d = c.matmul(this.weight);
+    return new Tensor(d);
+  }
+  parameters() {
+    return [this.weight];
+  }
+  toString() {
+    return `Embedding(num_embeddings=${this.num_embeddings}, embedding_dim=${this.embedding_dim})`;
   }
 };
 
@@ -2079,7 +2373,6 @@ var Tensor = class {
     this.id = "P" + Math.floor(Math.random() * 1e6).toString().padStart(6, "0");
     const _options = Object.assign({}, DefaultTensorOptions, options);
     if (_options._children.length !== 0) {
-      _options.device = _options._children[0].device;
       _options.requires_grad = _options._children[0].requires_grad;
     }
     if (data instanceof Tensor) {
@@ -2100,11 +2393,11 @@ var Tensor = class {
     this._op = _options._op;
     this._prev = new Set(_options._children);
     this._children = _options._children;
+    this.options = _options;
   }
   backward() {
     let topo = [];
     let visited = /* @__PURE__ */ new Set();
-    const thisShape = this.shape.slice();
     function build_topo(v) {
       if (!visited.has(v)) {
         visited.add(v);
@@ -2375,7 +2668,7 @@ var Tensor = class {
     return new Operations_exports.Transpose().forward(this, dim0, dim1);
   }
   zero_grad() {
-    this.grad = Tensor.zeros(this.data.shape).data;
+    this.grad = Tensor.zeros(this.data.shape, { device: this.device, requires_grad: this.requires_grad }).data;
   }
   __neg__() {
     return this.mul(this.mul(-1));
@@ -2395,13 +2688,6 @@ var Tensor = class {
   }
   toString() {
     return `Tensor(data=${this.data}, grad=${this.grad})`;
-  }
-  assign(other) {
-    this.data = other.data.copy();
-    return this;
-  }
-  copy() {
-    return new Tensor(this.data.copy());
   }
   // New ops
   maximum(other) {
@@ -2438,6 +2724,17 @@ var Tensor = class {
     if (dim < 0)
       dim = this.shape.length + dim + 1;
     return this.reshape([...this.shape.slice(0, dim), 1, ...this.shape.slice(dim)]);
+  }
+  assign(tensor) {
+    this.data = new Tensor(tensor.data.getData(), tensor.options).data;
+    this.grad = new Tensor(tensor.grad.getData(), tensor.options).data;
+    this.options = Object.assign({}, tensor.options);
+    return this;
+  }
+  to(device) {
+    this.device = device;
+    this.options.device = device;
+    return this.assign(this);
   }
 };
 
@@ -2535,6 +2832,213 @@ function TensorFactory(tensorData) {
   tensor.grad = new Tensor(tensorData.grad).data;
   return tensor;
 }
+
+// test/web/NN.test.ts
+function NNTest(device) {
+  TestRunner.describe("Linear", () => {
+    let linear = new nn_exports.Linear(2, 4);
+    linear.weight = new Tensor([[-0.5963, -62e-4], [0.1741, -0.1097], [-0.4237, -0.6666], [0.1204, 0.2781]], { requires_grad: true });
+    linear.bias = new Tensor([-0.458, -0.3401, 0.295, 0.1145], { requires_grad: true });
+    linear.to(device);
+    const input = new Tensor([[1, 2], [3, 4]], { device, requires_grad: true });
+    const out = linear.forward(input);
+    assert(`${linear}` === `Linear(in_features=2, out_features=4)`);
+    assert(equal(out, TensorFactory({ data: [[-1.0668, -0.3854, -1.4619, 0.7911], [-2.2719, -0.2566, -3.6425, 1.5882]], grad: [[0, 0, 0, 0], [0, 0, 0, 0]] }), 1e-3));
+  });
+  TestRunner.describe("Sequential", () => {
+    const model = new nn_exports.Sequential(
+      new nn_exports.Linear(2, 4),
+      new nn_exports.Linear(4, 4),
+      new nn_exports.Linear(4, 1)
+    ).to(device);
+    assert(model.modules.length === 3);
+    assert(`${model.modules[0]}` === `Linear(in_features=2, out_features=4)`);
+    assert(`${model.modules[1]}` === `Linear(in_features=4, out_features=4)`);
+    assert(`${model.modules[2]}` === `Linear(in_features=4, out_features=1)`);
+  });
+  TestRunner.describe("Dropout", () => {
+    Random.SetRandomSeed(1337);
+    let x = new Tensor([[
+      9e-3,
+      0,
+      0.1623,
+      0,
+      0,
+      0.4064,
+      0,
+      0,
+      0.1924,
+      0,
+      0,
+      0.0542,
+      0,
+      0.4154,
+      0,
+      0.2993,
+      0,
+      0.3429,
+      0.3209,
+      82e-4
+    ]]);
+    const dropout = new nn_exports.Dropout().to(device);
+    x = dropout.forward(x);
+    assert(equal(x, TensorFactory({ data: [[0, 0, 0.3246, 0, 0, 0.8128, 0, 0, 0, 0, 0, 0.1084, 0, 0.8308, 0, 0.5986, 0, 0, 0.6418, 0]], grad: [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] })));
+  });
+  TestRunner.describe("LayerNorm", () => {
+    const x = Tensor.arange(0, 10, 1, { device });
+    const layerNorm = new nn_exports.LayerNorm([10]).to(device);
+    const r = layerNorm.forward(x);
+    assert(equal(r, TensorFactory({ data: [-1.5666979540876567, -1.2185428531792886, -0.8703877522709204, -0.5222326513625523, -0.17407755045418408, 0.17407755045418408, 0.5222326513625523, 0.8703877522709204, 1.2185428531792886, 1.5666979540876567], grad: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })));
+  });
+  TestRunner.describe("Softmax", () => {
+    const x = Tensor.arange(0, 10, 1, { device });
+    const softmax = new nn_exports.Softmax(0).to(device);
+    const r = softmax.forward(x);
+    assert(equal(r, TensorFactory({ data: [7801341612780744e-20, 21206245143623275e-20, 5764455082375903e-19, 0.0015669413501390806, 0.004259388198344144, 0.011578217539911801, 0.031472858344688034, 0.08555209892803112, 0.23255471590259755, 0.6321492583604867], grad: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })));
+    const x1 = new Tensor([[5, 6, 3]], { device });
+    const softmax1 = new nn_exports.Softmax(1).to(device);
+    const r1 = softmax1.forward(x1);
+    assert(equal(r1, TensorFactory({ data: [[0.25949646034241913, 0.7053845126982412, 0.03511902695933972]], grad: [[0, 0, 0]] })));
+    const softmax2 = new nn_exports.Softmax(-1).to(device);
+    const r2 = softmax2.forward(x1);
+    assert(equal(r2, TensorFactory({ data: [[0.25949646034241913, 0.7053845126982412, 0.03511902695933972]], grad: [[0, 0, 0]] })));
+  });
+  TestRunner.describe("Embedding", () => {
+    Random.SetRandomSeed(1337);
+    let embedding = new nn_exports.Embedding(10, 3);
+    embedding.weight = new Tensor([
+      [0.1808, -0.07, -0.3596],
+      [-0.9152, 0.6258, 0.0255],
+      [0.9545, 0.0643, 0.3612],
+      [1.1679, -1.3499, -0.5102],
+      [0.236, -0.2398, -0.4713],
+      [84e-4, -0.6631, -0.2513],
+      [1.0101, 0.1215, 0.1584],
+      [1.134, -0.2221, 0.6924],
+      [-0.5075, -0.9239, 0.5467],
+      [-1.4948, -1.2057, 0.5718]
+    ]);
+    embedding = embedding.to(device);
+    const input = new Tensor([[1, 2, 4, 5], [4, 3, 2, 9]], { device });
+    const out = embedding.forward(input);
+    assert(equal(out, TensorFactory({ data: [
+      [
+        [-0.9152, 0.6258, 0.0255],
+        [0.9545, 0.0643, 0.3612],
+        [0.236, -0.2398, -0.4713],
+        [84e-4, -0.6631, -0.2513]
+      ],
+      [
+        [0.236, -0.2398, -0.4713],
+        [1.1679, -1.3499, -0.5102],
+        [0.9545, 0.0643, 0.3612],
+        [-1.4948, -1.2057, 0.5718]
+      ]
+    ], grad: [[[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]] })));
+  });
+}
+var NNTests = { category: "Layers", func: NNTest };
+
+// test/web/Network.test.ts
+function NetworkTest(device) {
+  TestRunner.describe("1 dense layer", () => {
+    Random.SetRandomSeed(1337);
+    class SingleLayerModel extends Module {
+      constructor(input_sample, output_sample) {
+        super();
+        this.dense1 = new nn_exports.Linear(input_sample, output_sample);
+      }
+      forward(x) {
+        x = this.dense1.forward(x);
+        return x;
+      }
+    }
+    const Xb = new Tensor([
+      [0.2, 0.3],
+      [-0.4, 0.8],
+      [-0.3, 0.9],
+      [0.5, 0.3]
+    ], { device, requires_grad: true });
+    const yb = new Tensor([[1], [0.2], [0.3], [0.7]], { device, requires_grad: true });
+    let model = new SingleLayerModel(2, 1);
+    model.dense1.weight = new Tensor([[-0.5963, -62e-4]]);
+    model.dense1.bias = new Tensor([0.1741]);
+    model = model.to(device);
+    const output = model.forward(Xb);
+    const loss = output.sub(yb).pow(2).mean();
+    model.zero_grad();
+    loss.backward();
+    const learning_rate = 0.01;
+    for (let p of model.parameters()) {
+      p.data = p.sub(new Tensor(p.grad, { device }).mul(learning_rate)).data;
+    }
+    assert(equal(loss, TensorFactory({ data: [0.40608614805], grad: [1] })));
+    assert(equal(model.dense1.weight, TensorFactory({ data: [[-0.59280177, -458459e-8]], grad: [[-0.349823, -0.16154099999999993]] })));
+    assert(equal(model.dense1.bias, TensorFactory({ data: [0.1816893], grad: [-0.75893] })));
+  });
+  TestRunner.describe("3 dense layers", () => {
+    Random.SetRandomSeed(1337);
+    class SimpleModel extends Module {
+      constructor(input_sample, output_sample) {
+        super();
+        this.dense1 = new nn_exports.Linear(input_sample, 4);
+        this.dense2 = new nn_exports.Linear(4, 4);
+        this.dense3 = new nn_exports.Linear(4, output_sample);
+      }
+      forward(x) {
+        x = this.dense1.forward(x);
+        x = this.dense2.forward(x);
+        x = this.dense3.forward(x);
+        return x;
+      }
+    }
+    function get_loss(model2, x_tensor, y_tensor) {
+      const pred = model2.forward(x_tensor).tanh();
+      const data_loss = pred.sub(y_tensor).pow(2).sum();
+      let reg_loss = new Tensor([0], { device, requires_grad: true });
+      for (let p of model2.parameters()) {
+        const w_sum = p.mul(p).sum();
+        const p_shape_prod = p.data.shape.reduce((p2, c) => p2 * c);
+        const div = w_sum.div(new Tensor(p_shape_prod, { device, requires_grad: true }));
+        reg_loss = reg_loss.add(div);
+      }
+      const alpha = new Tensor(1e-4, { device, requires_grad: true });
+      const total_loss = data_loss.mean().add(reg_loss.mul(alpha));
+      return total_loss;
+    }
+    const Xb = new Tensor([
+      [2, 3, -1],
+      [3, -1, 0.5],
+      [0.5, 1, 1],
+      [1, 1, -1]
+    ], { device, requires_grad: true });
+    const Y = new Tensor([1, 0.2, 0.3, 0.7], { device, requires_grad: true });
+    const Yb = Y.reshape([Y.shape[0], 1]);
+    let model = new SimpleModel(3, 2);
+    model.dense1.weight = new Tensor([[-0.4869, -51e-4, 0.1421], [-0.0896, -0.346, -0.5443], [0.0983, 0.2271, -0.374], [-0.2777, 0.2408, 0.0935]], { requires_grad: true });
+    model.dense1.bias = new Tensor([-0.5111, 0.3082, 0.4363, -0.2963], { requires_grad: true });
+    model.dense2.weight = new Tensor([[0.1005, 0.2079, 0.0102, -0.0935], [0.3864, -0.1422, 0.3963, 0.4639], [-0.4852, 0.2358, 0.2884, 0.4469], [-0.0344, 0.3378, -0.3731, -0.2868]], { requires_grad: true });
+    model.dense2.bias = new Tensor([-0.2056, -0.1323, -0.017, 0.1752], { requires_grad: true });
+    model.dense3.weight = new Tensor([[0.0226, 0.0536, 0.0701, -0.2519], [0.104, 0.2077, -0.421, 0.2629]], { requires_grad: true });
+    model.dense3.bias = new Tensor([0.2708, -0.4257], { requires_grad: true });
+    model = model.to(device);
+    let last_loss;
+    const epochs = 100;
+    for (let k = 0; k < epochs; k++) {
+      const total_loss = get_loss(model, Xb, Yb);
+      model.zero_grad();
+      total_loss.backward();
+      const learning_rate = 0.1;
+      for (let p of model.parameters()) {
+        p.data = p.sub(new Tensor(p.grad).mul(learning_rate)).data;
+      }
+      const total_loss2 = get_loss(model, Xb, Yb);
+      last_loss = total_loss2;
+    }
+    assert(equal(last_loss, TensorFactory({ data: [0.017161300405859947], grad: [0] }), 1e-3));
+  });
+}
+var NetworkTests = { category: "Network", func: NetworkTest };
 
 // test/web/Tensor.Grad.test.ts
 function TensorGradTest(device) {
@@ -2718,6 +3222,13 @@ function TensorTest(device) {
     assert(equal(c, new Tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])));
     assert(equal(c.shape, [2, 2, 2]));
   });
+  TestRunner.describe("Tensor to", () => {
+    const a = new Tensor([[1, 2], [3, 4]], { device });
+    assert(a.device === device);
+    const otherDevice = device === 0 /* CPU */ ? 1 /* WEBGL */ : 0 /* CPU */;
+    const b = a.to(otherDevice);
+    assert(b.device === otherDevice);
+  });
   TestRunner.describe("Zeros", () => {
     const a = Tensor.zeros([2, 2, 3], { device });
     assert(equal(a, new Tensor([[[0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0]]])));
@@ -2811,6 +3322,15 @@ function TensorTest(device) {
     assert(equal(i, new Tensor([[16, 16, 16], [16, 16, 16]])));
     assert(equal(i.shape, [2, 3]));
   });
+  TestRunner.describe("Negative pow", () => {
+    const a = new Tensor([-2, 2, -2], { device });
+    const b = new Tensor([2, 2, 2], { device });
+    const c = a.pow(b);
+    assert(equal(c, new Tensor([4, 4, 4])));
+    const d = new Tensor([3, 3, 3], { device });
+    const e = a.pow(d);
+    assert(equal(e, new Tensor([-8, 8, -8])));
+  });
   TestRunner.describe("Binary Ops scalars", () => {
     const a = new Tensor([[1, 1, 1], [2, 2, 2]], { device });
     const b = a.add(10);
@@ -2890,7 +3410,6 @@ function TensorTest(device) {
     const b = new Tensor([[1, 2], [3, 4]], { device });
     const c = new Tensor([[0, 1], [0, 5]], { device });
     const d = a.sum();
-    console.log(`d ${d}`);
     assert(equal(d, new Tensor([2])));
     assert(equal(d.shape, [1]));
     const e = b.sum();
@@ -2907,7 +3426,6 @@ function TensorTest(device) {
     assert(equal(h.shape, [2]));
     const i = new Tensor([[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 0, 0], [1, 1, 0]], { device });
     assert(equal(i.sum(null, true), new Tensor([[6]])));
-    console.log(`t ${i.sum(0, true)}`);
     assert(equal(i.sum(0, true), new Tensor([[2, 4, 0]])));
     assert(equal(i.sum(0, false), new Tensor([2, 4, 0])));
     assert(equal(i.sum(1, true), new Tensor([[0], [1], [2], [1], [2]])));
@@ -3203,7 +3721,9 @@ TestRunner.UnitTests = [
   // TestTests,
   // SumTests
   TensorTests,
-  TensorGradTests
+  TensorGradTests,
+  NNTests,
+  NetworkTests
 ];
 export {
   TestRunner

@@ -635,8 +635,6 @@ export class WEBGLBuffer extends TensorBuffer {
     }
 
     public reduce_op(op: ReduceOps, axes: number[]): WEBGLBuffer {
-        const webglOp = op === ReduceOps.SUM ? "+" : "*";
-
         function prod(array: number[]): number {
             return array.reduce((p, c) => p * c);
         }
@@ -826,47 +824,33 @@ export class WEBGLBuffer extends TensorBuffer {
 
         const v = this;
         const r = new WEBGLBuffer(outputTexture, this.shape, TensorBuffer.computeStrides(this.shape), this.offset);
-        function d() {
-            console.log(`
-                contiguous output:
-                    data: ${r}
-                    expected output: ${v}
-                    readPixels: ${outputTexture.read()} 
-                `);
-        }
-
-        // d()
-        // r.getInternalData()
-        // console.log("");
-
-        // console.log(`r ${r}`);
         return r;
     }
 
 
-    // private copyToShape(shape: number[]): WEBGLBuffer {
-    //     const inputTexture = this.texture;
-    //     const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
+    private copyToShape(shape: number[]): WEBGLBuffer {
+        const inputTexture = this.texture;
+        const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
 
-    //     WEBGLContext.runKernel(`#version 300 es
-    //     precision mediump float;
+        WEBGLContext.runKernel(`#version 300 es
+        precision mediump float;
 
-    //     uniform sampler2D u_tex0;
+        uniform sampler2D u_tex0;
 
-    //     out vec4 result;
+        out vec4 result;
 
-    //     void main() {
-    //         ivec2 coords = ivec2(gl_FragCoord.xy);
-    //         vec4 t1 = texelFetch(u_tex0, coords, 0);
+        void main() {
+            ivec2 coords = ivec2(gl_FragCoord.xy);
+            vec4 t1 = texelFetch(u_tex0, coords, 0);
         
-    //         result = t1;
-    //     }`, [inputTexture], outputTexture);
+            result = t1;
+        }`, [inputTexture], outputTexture);
 
-    //     console.log(`shapes ${this.shape} ${shape}`);
-    //     console.log(`inp ${inputTexture.read()}`);
-    //     console.log(`out ${outputTexture.read()}`);
-    //     return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
-    // }
+        // console.log(`shapes ${this.shape} ${shape}`);
+        // console.log(`inp ${inputTexture.read()}`);
+        // console.log(`out ${outputTexture.read()}`);
+        return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
+    }
 
 
 

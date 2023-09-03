@@ -43,7 +43,6 @@ export class Tensor {
         const _options: TensorOptions = Object.assign({}, DefaultTensorOptions, options);
 
         if (_options._children.length !== 0) {
-            // _options.device = _options._children[0].device;
             _options.requires_grad = _options._children[0].requires_grad;
         }
 
@@ -113,8 +112,11 @@ export class Tensor {
     // TODO: Should use strides and shape to do this
     private static TensorFromNumber(value: number, shape: number[], options?: TensorOptions): Tensor {
         const desiredElements = shape.reduce((acc, val) => acc * val, 1);
-        if (value === 0) return new Tensor(new Float32Array(desiredElements), options).reshape(shape);
-        return new Tensor(new Float32Array(desiredElements).fill(value), options).reshape(shape);
+        const device = options && options.device ? options.device : Device.CPU;
+        if (value === 0) return new Tensor(Backend.CreateFromFloat32Array(device, new Float32Array(desiredElements), shape), options);
+        return new Tensor(Backend.CreateFromFloat32Array(device, new Float32Array(desiredElements).fill(value), shape), options);
+        // if (value === 0) return new Tensor(new Float32Array(desiredElements), options).reshape(shape);
+        // return new Tensor(new Float32Array(desiredElements).fill(value), options).reshape(shape);
     }
 
     public static zeros(size: number[], options?: TensorOptions): Tensor {
@@ -152,7 +154,10 @@ export class Tensor {
         for (let i = 0; i < data.length; i++) {
             data[i] = Random.RandomRange(low, high);
         }
-        return new Tensor(data, options).reshape(shape);
+        // return new Tensor(data, options).reshape(shape);
+        const device = options.device ? options.device : Device.CPU;
+        const tb = Backend.CreateFromFloat32Array(device, data, shape);
+        return new Tensor(tb, options);
     }
 
     public is_contiguous(): boolean {
@@ -225,7 +230,7 @@ export class Tensor {
             }
         }
         const tb = Backend.CreateFromDataShapeAndStrides(this.data, newShape, newStrides, offset);
-        return new Tensor(tb);
+        return new Tensor(tb, {device: this.device, requires_grad: this.requires_grad});
     }
 
     public split(split_sizes: number | number[], dim: null | number = null): Tensor[] {
@@ -310,7 +315,7 @@ export class Tensor {
     }
     
     public div(other: Tensor | number) {
-        if (!(other instanceof Tensor)) other = new Tensor(other);
+        if (!(other instanceof Tensor)) other = new Tensor(other, {device: this.device, requires_grad: this.requires_grad});
         return this.mul(other.pow(-1));
     }
 
@@ -403,27 +408,6 @@ export class Tensor {
         this.grad = Tensor.zeros(this.data.shape, {device: this.device, requires_grad: this.requires_grad}).data;
     }
 
-    public __neg__() {
-        return this.mul(this.mul(-1));
-    }
-
-    public __radd__(other: Tensor) {
-        return this.add(other);
-    }
-
-    public __rsub__(other: Tensor | number) {
-        const o = other instanceof Tensor ? other : new Tensor(other);
-        return o.add(this.mul(-1));
-    }
-
-    public __rmul__(other: Tensor | number) {
-        return this.mul(other);
-    }
-
-    public __rtruediv__(other: Tensor) {
-        return other.mul(this.pow(-1));
-    }
-
     public toString() {
         return `Tensor(data=${this.data}, grad=${this.grad})`;
     }
@@ -475,6 +459,7 @@ export class Tensor {
         this.data = new Tensor(tensor.data.getData(), tensor.options).data;
         this.grad = new Tensor(tensor.grad.getData(), tensor.options).data;
         this.options = Object.assign({}, tensor.options);
+
         return this;
     }
 

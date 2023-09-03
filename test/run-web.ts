@@ -4,6 +4,7 @@ import { SumTests } from "./web/Sum.test";
 import { TensorGradTests } from "./web/Tensor.Grad.test";
 import { TensorTests } from "./web/Tensor.test";
 import { TestTests } from "./web/Test.test";
+import { NetworksTests } from "./web/networks/Networks.test";
 
 export class TestRunner {
     public static describe(name: string, func: Function) {
@@ -13,9 +14,11 @@ export class TestRunner {
     public static UnitTests = [
         // TestTests,
         // SumTests
+        
         TensorTests,
         TensorGradTests,
         NNTests,
-        NetworkTests
+        NetworkTests,
+        // NetworksTests
     ]
 }

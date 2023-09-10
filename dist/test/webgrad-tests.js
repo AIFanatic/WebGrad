@@ -1123,10 +1123,10 @@ var WEBGLBuffer = class extends TensorBuffer {
 };
 
 // src/backend/Backend.ts
-var Device = /* @__PURE__ */ ((Device4) => {
-  Device4[Device4["CPU"] = 0] = "CPU";
-  Device4[Device4["WEBGL"] = 1] = "WEBGL";
-  return Device4;
+var Device = /* @__PURE__ */ ((Device5) => {
+  Device5[Device5["CPU"] = 0] = "CPU";
+  Device5[Device5["WEBGL"] = 1] = "WEBGL";
+  return Device5;
 })(Device || {});
 var Backend = class {
   static CreateFromArray(device, array) {
@@ -3737,6 +3737,69 @@ function NetworkTest(device) {
 }
 var NetworkTests = { category: "Network", func: NetworkTest };
 
+// test/web/networks/MoonsData/MoonsData.test.ts
+function NetworkMoonsData(device) {
+  TestRunner.describe("MoonsData test", () => {
+    Random.SetRandomSeed(1337);
+    function generateData(n) {
+      var data = [];
+      var labels = [];
+      for (var i = 0; i < Math.PI; i += Math.PI * 2 / n) {
+        var point_1 = [
+          Math.cos(i) + Random.RandomRange(-0.1, 0.1),
+          Math.sin(i) + Random.RandomRange(-0.1, 0.1)
+        ];
+        data.push(point_1);
+        labels.push(-1);
+        var point_2 = [
+          1 - Math.cos(i) + Random.RandomRange(-0.1, 0.1),
+          1 - Math.sin(i) + Random.RandomRange(-0.1, 0.1) - 0.5
+        ];
+        data.push(point_2);
+        labels.push(1);
+      }
+      return [data, labels];
+    }
+    class SimpleModel extends Module {
+      constructor(input_sample, output_sample) {
+        super();
+        this.dense1 = new nn_exports.Linear(input_sample, 16);
+        this.dense2 = new nn_exports.Linear(16, 16);
+        this.dense3 = new nn_exports.Linear(16, output_sample);
+      }
+      forward(x) {
+        x = this.dense1.forward(x).tanh();
+        x = this.dense2.forward(x).tanh();
+        x = this.dense3.forward(x).tanh();
+        return x;
+      }
+    }
+    const [Xb, yb] = generateData(100);
+    const X = new Tensor(Xb, { device, requires_grad: true });
+    const y = new Tensor(yb, { device, requires_grad: true }).reshape([100, 1]);
+    const model = new SimpleModel(2, 1).to(device);
+    let last_loss = new Tensor(0, { device });
+    const epochs = 100;
+    for (let k = 0; k < epochs; k++) {
+      const pred = model.forward(X);
+      const loss = pred.sub(y).pow(2).mean();
+      model.zero_grad();
+      loss.backward();
+      for (let p of model.parameters()) {
+        p.data = p.sub(new Tensor(p.grad).mul(0.5)).data;
+      }
+      last_loss = loss;
+    }
+    assert(equal(last_loss, TensorFactory({ data: [3e-3], grad: [1] }), 1e-4));
+  });
+}
+
+// test/web/networks/Networks.test.ts
+function NetworksTest(device) {
+  NetworkMoonsData(device);
+}
+var NetworksTests = { category: "Networks", func: NetworksTest };
+
 // test/src/TableBody.ts
 var TableBody = class {
   constructor(table) {
@@ -3839,8 +3902,8 @@ var UnitTests = [
   TensorTests,
   TensorGradTests,
   NNTests,
-  NetworkTests
-  // NetworksTests
+  NetworkTests,
+  NetworksTests
 ];
 var WebGradTests = class {
   constructor(container) {

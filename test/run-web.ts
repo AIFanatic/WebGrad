@@ -12,13 +12,13 @@ export class TestRunner {
     }
 
     public static UnitTests = [
-        // TestTests,
+        TestTests,
         // SumTests
         
         TensorTests,
         TensorGradTests,
         NNTests,
-        NetworkTests,
+        // NetworkTests,
         // NetworksTests
     ]
 }

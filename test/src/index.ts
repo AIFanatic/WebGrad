@@ -18,7 +18,7 @@ const UnitTests = [
     TensorGradTests,
     NNTests,
     NetworkTests,
-    // NetworksTests
+    NetworksTests
 ]
 export interface TestEntry {
     categoryElement: HTMLTableRowElement;

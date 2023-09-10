@@ -13,7 +13,9 @@
     "build": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm",
     "dev": "esbuild ./src/index.ts --bundle --outfile=./dist/webgrad-ts.js --target=es2020 --format=esm --watch",
     "test-node": "esr ./test/run-node.ts",
-    "test-web": "esbuild ./test/run-web.ts --bundle --outfile=./dist/test/webgrad-ts-web-tests.js --target=es2020 --format=esm --watch"
+    "test-web": "esbuild ./test/run-web.ts --bundle --outfile=./dist/test/webgrad-ts-web-tests.js --target=es2020 --format=esm --watch",
+
+    "test-web1": "esbuild ./test/src/index.ts --bundle --outfile=./dist/test/webgrad-tests.js --target=es2020 --format=esm --watch"
   },
   "devDependencies": {
     "@types/node": "^20.5.6",

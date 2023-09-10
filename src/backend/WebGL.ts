@@ -57,6 +57,8 @@ export class Texture {
     public readonly texture: WebGLTexture;
     public readonly originalShape: number[];
 
+    public creator: string;
+
     constructor(data: Float32Array | null, info: ITextureInfo) {
         if (data === undefined) throw Error("Got undefined data");
 
@@ -85,6 +87,12 @@ export class Texture {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
             this.texture = texture;
+        }
+
+        try {
+            throw Error("creator");
+        } catch (error) {
+            this.creator = error;
         }
     }
 
@@ -125,17 +133,17 @@ export class Texture {
     }
 
     public static shapeTo2d(shape: number[]): [number, number] {
-        // let shape2d: [number, number] = [shape[0], 1];
-        // for (let i = 1; i < shape.length; i++) {
-        //     shape2d[1] *= shape[i];
-        // }
-        // return shape2d;
-
-        let shape2d: [number, number] = [1, shape[shape.length - 1]];
-        for (let i = shape.length - 1; i >= 0; i--) {
-            shape2d[0] *= shape[i];
+        let shape2d: [number, number] = [shape[0], 1];
+        for (let i = 1; i < shape.length; i++) {
+            shape2d[1] *= shape[i];
         }
         return shape2d;
+
+        // let shape2d: [number, number] = [1, shape[shape.length - 1]];
+        // for (let i = shape.length - 1; i >= 0; i--) {
+        //     shape2d[0] *= shape[i];
+        // }
+        // return shape2d;
     }
 
     // Computes the width and height necessary to fit in an RGBA texture.
@@ -475,16 +483,18 @@ export class WEBGLBuffer extends TensorBuffer {
     public data: Float32Array;
     public texture: Texture;
 
+    public creator: string;
+
     constructor(data: WEBGLBuffer | Texture | Float32Array, shape: number[], strides: number[], offset: number) {
         if (!data || data === null) throw Error("Cannot create buffer with no data");
 
         super(shape, strides, offset, Device.WEBGL);
 
-        if (data instanceof Texture) {
-            if (!equalArrays(data.originalShape, shape)) {
-                console.warn("Passed texture", data.originalShape, shape)
-            }
-        }
+        // if (data instanceof Texture) {
+        //     if (!equalArrays(data.originalShape, shape)) {
+        //         console.warn("Passed texture", data.originalShape, shape);
+        //     }
+        // }
         
         if (data instanceof Float32Array) this.data = data;
         if (data instanceof Texture) this.texture = data;
@@ -492,6 +502,12 @@ export class WEBGLBuffer extends TensorBuffer {
             if (!data.data && !data.texture) throw Error("Tried to create WEBGLBuffer with no data or texture.");
             if (data.data) this.data = data.data;
             else if (data.texture) this.texture = data.texture;
+        }
+
+        try {
+            throw Error("creator");
+        } catch (error) {
+            this.creator = error;
         }
     }
 
@@ -521,11 +537,8 @@ export class WEBGLBuffer extends TensorBuffer {
 
         if (this.texture) {
             if (!equalArrays(this.shape, this.texture.originalShape)) {
-                // console.warn(this.shape, this.texture.originalShape)
-                // throw Error("HERE");
-                this.texture = Texture.createUnpackedFromShape(this.texture.read(), this.shape);
-                
-                // this.texture = this.copyToShape(this.shape).texture;
+                // this.texture = Texture.createUnpackedFromShape(this.texture.read(), this.shape);
+                this.texture = this.copyToShape(this.shape).texture;
             }
             return this.texture;
         }
@@ -533,16 +546,6 @@ export class WEBGLBuffer extends TensorBuffer {
             this.texture = Texture.createUnpackedFromShape(this.data, this.shape);
         }
         return this.texture;
-
-        // if (!this.data && !this.texture) throw Error("Tried to create unpacked texture without a data or texture field");
-
-        // if (this.texture) {
-        //     // console.log(`${this.texture}`);
-        //     this.data = this.texture.read();
-        // }
-
-        // this.texture = Texture.createUnpackedFromShape(this.data, this.shape);
-        // return this.texture;
     }
 
     public createUnpackedTextureFromDimensions(width: number, height: number): Texture {
@@ -639,6 +642,9 @@ export class WEBGLBuffer extends TensorBuffer {
             return array.reduce((p, c) => p * c);
         }
 
+        // console.log(`input ${this.texture.read()} ${this.shape} ${this.strides} ${axes}`);
+        // console.log(`axes ${axes}`);
+
         const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
 
         function sumDim(input: Texture, shape: number[], stride: number): Texture {
@@ -707,7 +713,7 @@ export class WEBGLBuffer extends TensorBuffer {
 
         const totalNumberOfElements = prod(this.shape);
         while (stride < totalNumberOfElements) {
-            // console.log(outputTexture.read())
+            // console.log(`${outputTexture.read()}`)
             outputTexture = sumDim(outputTexture, this.shape, stride);
             stride *= 2;
         }
@@ -755,9 +761,9 @@ export class WEBGLBuffer extends TensorBuffer {
         let resultShape = calculateReducedShape(this.shape, axes, false);
         resultShape = resultShape.length === 0 ? resultShape = [1] : resultShape;
 
-        // return new WEBGLBuffer(outputTexturePacked, resultShape, TensorBuffer.computeStrides(resultShape), this.offset);
-        
-        const r = new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+        // const r = new WEBGLBuffer(outputTexturePacked, resultShape, TensorBuffer.computeStrides(resultShape), this.offset);
+        // return r;
+        const r = new WEBGLBuffer(outputTexturePacked, outputTexture.originalShape, TensorBuffer.computeStrides(outputTexture.originalShape), this.offset);
         return MovementOp.reshape(r, resultShape) as unknown as WEBGLBuffer;
     }
 
@@ -822,33 +828,41 @@ export class WEBGLBuffer extends TensorBuffer {
             result = d;
         }`, [inputTexture], outputTexture, uniforms);
 
-        const v = this;
         const r = new WEBGLBuffer(outputTexture, this.shape, TensorBuffer.computeStrides(this.shape), this.offset);
         return r;
     }
-
 
     private copyToShape(shape: number[]): WEBGLBuffer {
         const inputTexture = this.texture;
         const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
 
+        const uniforms: WEBGLKernelUniform[] = [
+            { name: "widthIn", value: inputTexture.width, type: UniformType.INT },
+            { name: "widthOut", value: outputTexture.width, type: UniformType.INT },
+        ];
+
         WEBGLContext.runKernel(`#version 300 es
         precision mediump float;
-
+        
         uniform sampler2D u_tex0;
+        uniform int widthIn;
+        uniform int widthOut;
 
-        out vec4 result;
+        out float result;
+
+        ivec2 getIndexCoords(int index) {
+            return ivec2(index % widthIn, index / widthIn);
+        }
 
         void main() {
-            ivec2 coords = ivec2(gl_FragCoord.xy);
+            int index = int(gl_FragCoord.x) + int(gl_FragCoord.y) * widthOut;
+            ivec2 coords = getIndexCoords(index);
+
             vec4 t1 = texelFetch(u_tex0, coords, 0);
         
-            result = t1;
-        }`, [inputTexture], outputTexture);
+            result = t1.r;
+        }`, [inputTexture], outputTexture, uniforms);
 
-        // console.log(`shapes ${this.shape} ${shape}`);
-        // console.log(`inp ${inputTexture.read()}`);
-        // console.log(`out ${outputTexture.read()}`);
         return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
     }
 

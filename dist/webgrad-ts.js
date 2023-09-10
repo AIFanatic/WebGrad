@@ -503,15 +503,6 @@ var Texture = class {
   //
   // TODO: The height is being increased if the pixels still dont fit the data.
   //       Is this enought or are there any exceptions?
-  // public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
-  //     const shape2D = Texture.shapeTo2d(shape);
-  //     const prodShape = shape2D.reduce((p, c) => p * c);
-  //     const width = Math.ceil(Math.sqrt(prodShape / channels));
-  //     let height = Math.floor(Math.sqrt(prodShape / channels));
-  //     if (width * height * channels < prodShape) height++;
-  //     if (width * height * channels < prodShape) throw Error("Couldnt get enough pixels to compute.");
-  //     return [width, height];
-  // }
   static calculateWidthAndHeightToFitShape(shape, channels) {
     const shape2D = Texture.shapeTo2d(shape);
     const prodShape = shape2D.reduce((p, c) => p * c);
@@ -909,7 +900,6 @@ var WEBGLBuffer = class extends TensorBuffer {
     return new WEBGLBuffer(outputTexture, this.shape, this.strides, this.offset);
   }
   reduce_op(op, axes) {
-    const webglOp = op === 0 /* SUM */ ? "+" : "*";
     function prod(array) {
       return array.reduce((p, c) => p * c);
     }
@@ -1076,33 +1066,26 @@ var WEBGLBuffer = class extends TensorBuffer {
         }`, [inputTexture], outputTexture, uniforms);
     const v = this;
     const r = new WEBGLBuffer(outputTexture, this.shape, TensorBuffer.computeStrides(this.shape), this.offset);
-    function d() {
-      console.log(`
-                contiguous output:
-                    data: ${r}
-                    expected output: ${v}
-                    readPixels: ${outputTexture.read()} 
-                `);
-    }
     return r;
   }
-  // private copyToShape(shape: number[]): WEBGLBuffer {
-  //     const inputTexture = this.texture;
-  //     const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
-  //     WEBGLContext.runKernel(`#version 300 es
-  //     precision mediump float;
-  //     uniform sampler2D u_tex0;
-  //     out vec4 result;
-  //     void main() {
-  //         ivec2 coords = ivec2(gl_FragCoord.xy);
-  //         vec4 t1 = texelFetch(u_tex0, coords, 0);
-  //         result = t1;
-  //     }`, [inputTexture], outputTexture);
-  //     console.log(`shapes ${this.shape} ${shape}`);
-  //     console.log(`inp ${inputTexture.read()}`);
-  //     console.log(`out ${outputTexture.read()}`);
-  //     return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
-  // }
+  copyToShape(shape) {
+    const inputTexture = this.texture;
+    const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
+    WEBGLContext.runKernel(`#version 300 es
+        precision mediump float;
+
+        uniform sampler2D u_tex0;
+
+        out vec4 result;
+
+        void main() {
+            ivec2 coords = ivec2(gl_FragCoord.xy);
+            vec4 t1 = texelFetch(u_tex0, coords, 0);
+        
+            result = t1;
+        }`, [inputTexture], outputTexture);
+    return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
+  }
   toString() {
     function fixed(key, val) {
       return val.toFixed ? Number(val.toFixed(4)) : val;
@@ -1229,9 +1212,10 @@ var Tensor = class {
   // TODO: Should use strides and shape to do this
   static TensorFromNumber(value, shape, options) {
     const desiredElements = shape.reduce((acc, val) => acc * val, 1);
+    const device = options && options.device ? options.device : 0 /* CPU */;
     if (value === 0)
-      return new Tensor(new Float32Array(desiredElements), options).reshape(shape);
-    return new Tensor(new Float32Array(desiredElements).fill(value), options).reshape(shape);
+      return new Tensor(Backend.CreateFromFloat32Array(device, new Float32Array(desiredElements), shape), options);
+    return new Tensor(Backend.CreateFromFloat32Array(device, new Float32Array(desiredElements).fill(value), shape), options);
   }
   static zeros(size, options) {
     return Tensor.TensorFromNumber(0, size, options);
@@ -1263,7 +1247,9 @@ var Tensor = class {
     for (let i = 0; i < data.length; i++) {
       data[i] = Random.RandomRange(low, high);
     }
-    return new Tensor(data, options).reshape(shape);
+    const device = options.device ? options.device : 0 /* CPU */;
+    const tb = Backend.CreateFromFloat32Array(device, data, shape);
+    return new Tensor(tb, options);
   }
   is_contiguous() {
     return this.data.is_contiguous();
@@ -1329,7 +1315,7 @@ var Tensor = class {
       }
     }
     const tb = Backend.CreateFromDataShapeAndStrides(this.data, newShape, newStrides, offset);
-    return new Tensor(tb);
+    return new Tensor(tb, { device: this.device, requires_grad: this.requires_grad });
   }
   split(split_sizes, dim = null) {
     if (Array.isArray(split_sizes))
@@ -1397,7 +1383,7 @@ var Tensor = class {
   }
   div(other) {
     if (!(other instanceof Tensor))
-      other = new Tensor(other);
+      other = new Tensor(other, { device: this.device, requires_grad: this.requires_grad });
     return this.mul(other.pow(-1));
   }
   pow(other) {
@@ -1468,22 +1454,6 @@ var Tensor = class {
   }
   zero_grad() {
     this.grad = Tensor.zeros(this.data.shape, { device: this.device, requires_grad: this.requires_grad }).data;
-  }
-  __neg__() {
-    return this.mul(this.mul(-1));
-  }
-  __radd__(other) {
-    return this.add(other);
-  }
-  __rsub__(other) {
-    const o = other instanceof Tensor ? other : new Tensor(other);
-    return o.add(this.mul(-1));
-  }
-  __rmul__(other) {
-    return this.mul(other);
-  }
-  __rtruediv__(other) {
-    return other.mul(this.pow(-1));
   }
   toString() {
     return `Tensor(data=${this.data}, grad=${this.grad})`;

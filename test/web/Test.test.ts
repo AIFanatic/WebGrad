@@ -1,35 +1,44 @@
 import { assert, equal, TensorFactory } from "../TestUtils";
 import { Tensor } from "../../src/Tensor";
 import { TestRunner } from "../run-web";
-import { Device } from "../../src/backend/Backend";
+import { Backend, Device } from "../../src/backend/Backend";
 import { NetworkMoonsData } from "./networks/MoonsData/MoonsData.test";
+import { TensorBuffer } from "../../src/backend/TensorBuffer";
+import { Random } from "../../src";
 
 function TestTest(device: Device) {
-    // TestRunner.describe("Add", () => {
-    //     const a = new Tensor([[1, 1, 1], [2, 2, 2]], {device: device});
-    //     const b = new Tensor([[3, 3, 3], [4, 4, 4]], {device: device});
-    
-    //     const c = a.add(b);
-    //     assert(equal(c, new Tensor([[4, 4, 4], [6, 6, 6]])));
-    //     assert(equal(c.shape, [2, 3]));
+    // TestRunner.describe("Split", () => {
+    //     // const a = Tensor.arange(0, 10).reshape([5, 2]);
+    //     const a = new Tensor([[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]);
+
+    //     const b = a.split(2);
+    //     console.log(`b`, b);
+    //     assert(b.length == 3);
+    //     assert(equal(b[0], new Tensor([[0, 1], [2, 3]])));
+    //     assert(equal(b[1], new Tensor([[4, 5], [6, 7]])));
+    //     assert(equal(b[2], new Tensor([[8, 9]])));
+
+    //     const c = a.split([1,4]);
+    //     console.log(`c`, c);
+    //     assert(c.length == 2);
+    //     assert(equal(c[0], new Tensor([[0, 1]])));
+    //     assert(equal(c[1], new Tensor([[2, 3], [4, 5], [6, 7], [8, 9]])));
     // })
 
-    TestRunner.describe("Matmul", () => {
-        const a = new Tensor([[1,2], [3,4]], {device: device, requires_grad: true});
-        const b = new Tensor([[5,6], [7,8]], {device: device, requires_grad: true});
-        const c = a.matmul(b);
-    
-        c.backward();
-    
-        console.log(`a ${a}`);
-        assert(equal(a, TensorFactory({data: [[1,2],[3,4]], grad: [[11,15],[11,15]]})));
-        assert(equal(b, TensorFactory({data: [[5,6],[7,8]], grad: [[4,4],[6,6]]})));
-        assert(equal(c, TensorFactory({data: [[19,22],[43,50]], grad: [[1,1],[1,1]]})));
+    TestRunner.describe("Split2", () => {
+        Random.SetRandomSeed(1337);
+
+        const n_embd = 48;
+        const shape = [1,13,144];
+        // const a = Tensor.zeros(shape, {device: device});
+        const a = Tensor.rand(shape, {device: device});
+
+        const [q,k,v] = a.split(n_embd, 2);
+        console.log(q.data.getData().flat(Infinity));
+        // console.log(`q ${q} ${q.shape}`);
+        // console.log(`k ${k} ${k.shape}`);
+        // console.log(`v ${v} ${v.shape}`);
     })
-
-    // TestRunner.describe("MoonsData", () => {
-    //     NetworkMoonsData(device);
-    // })
 }
 
 export const TestTests = {category: "Test", func: TestTest};

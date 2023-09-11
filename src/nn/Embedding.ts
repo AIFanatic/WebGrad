@@ -15,11 +15,6 @@ export class Embedding extends Module {
         this.embedding_dim = embedding_dim;
     }
 
-    public getFirsts(v: Tensor): number[] {
-        const data = v.data.getData();
-        return [data[0][0][0], data[0][0][1], data[0][0][2]];
-    }
-
     public forward(x: Tensor): Tensor {
         const va = Tensor.arange(0, this.num_embeddings, 1, {device: x.device});
         const vb = va.reshape([1,1,this.num_embeddings]);

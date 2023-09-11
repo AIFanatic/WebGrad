@@ -659,6 +659,21 @@ function TensorTest(device: Device) {
         assert(equal(b, new Tensor([[1, 2, 3], [0, 5, 6], [0, 0, 9], [0, 0, 0]])));
         assert(equal(b.shape, [4, 3]));
     })
+
+    TestRunner.describe("Split", () => {
+        const a = Tensor.arange(0, 10).reshape([5, 2]);
+
+        const b = a.split(2);
+        assert(b.length == 3);
+        assert(equal(b[0], new Tensor([[0, 1], [2, 3]])));
+        assert(equal(b[1], new Tensor([[4, 5], [6, 7]])));
+        assert(equal(b[2], new Tensor([[8, 9]])));
+
+        const c = a.split([1,4]);
+        assert(c.length == 2);
+        assert(equal(c[0], new Tensor([[0, 1]])));
+        assert(equal(c[1], new Tensor([[2, 3], [4, 5], [6, 7], [8, 9]])));
+    })
 }
 
 export const TensorTests = {category: "Tensor", func: TensorTest};

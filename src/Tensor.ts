@@ -29,13 +29,13 @@ export class Tensor {
     public _children: Tensor[];
     public _prev: Set<Tensor>;
     public _op: Operation;
-    public device: Device;
     public requires_grad: boolean;
     private options: TensorOptions;
 
     public get shape(): number[] { return this.data.shape; }
     public get strides(): number[] { return this.data.strides; }
     public get offset(): number { return this.data.offset; }
+    public get device(): Device { return this.data.device; }
 
     constructor(data: TensorDataTypes, options?: TensorOptions) {
         this.id = "P" + Math.floor(Math.random() * 1000000).toString().padStart(6, "0");
@@ -49,11 +49,12 @@ export class Tensor {
         if (data instanceof Tensor) {
             this.data = data.data;
             _options.device = options && options.device ? options.device : data.device;
-
-            // _options._op = options && options._op !== null ? options._op : data._op;
-            // _options._children = options && options._children && options._children.length !== 0 ? options._children : data._children;
         }
         else if (data instanceof TensorBuffer) {
+            // if (data.device !== _options.device) {
+            //     console.warn("data.device !== options.device", data.device, _options.device)
+            // }
+
             this.data = data;
             _options.device = options && options.device ? options.device : data.device;
         }
@@ -62,7 +63,7 @@ export class Tensor {
         else if (!isNaN(data)) this.data = Backend.CreateFromNumber(_options.device, data);
 
         this.grad = Backend.CreateFromFloat32Array(_options.device, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
-        this.device = _options.device;
+        // this.device = _options.device;
         this.requires_grad = _options.requires_grad;
         this._op = _options._op;
         this._prev = new Set(_options._children);
@@ -233,28 +234,46 @@ export class Tensor {
         return new Tensor(tb, {device: this.device, requires_grad: this.requires_grad});
     }
 
-    public split(split_sizes: number | number[], dim: null | number = null): Tensor[] {
-        if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");
-        if (dim !== null) throw Error("Split dim not supported");
+    public split(split_sizes: number | number[], dim: number = 0): Tensor[] {
+        const matrix = this;
+        const dimSize = matrix.shape[dim];
     
-        const chunkSize = split_sizes;
-        const lastDim = this.shape[this.shape.length - 1];
-        if (lastDim % chunkSize !== 0) {
-            throw new Error('Invalid chunk size, not evenly divisible into last tensor dimension');
+        let splitIntervals: number[];
+    
+        // Determine the intervals to split based on split_sizes
+        if (typeof split_sizes === 'number') {
+            const numFullChunks = Math.floor(dimSize / split_sizes);
+            const lastChunkSize = dimSize - (numFullChunks * split_sizes);
+            splitIntervals = Array(numFullChunks).fill(split_sizes);
+    
+            if (lastChunkSize > 0) {
+                splitIntervals.push(lastChunkSize);
+            }
+        } else {
+            splitIntervals = split_sizes;
+            if (splitIntervals.reduce((acc, val) => acc + val, 0) !== dimSize) {
+                throw new Error("Sum of split sizes must equal the size of the dimension being split.");
+            }
         }
     
-        const numChunks = lastDim / chunkSize;
         const out: Tensor[] = [];
-    
         let start = 0;
-        for (let i = 0; i < numChunks; i++) {
-            let end = start + chunkSize;
     
-            const sliceIndices = this.shape.map((dimSize, idx) => idx === this.shape.length - 1 ? [start, end] : [0, dimSize]);
-            const chunk = this.slice(sliceIndices);
+        for (let size of splitIntervals) {
+            let end = start + size;
+            
+            // Prepare slice boundaries for all dimensions
+            let sliceIndices = matrix.shape.map((size, index) => {
+                if (index === dim) {
+                    return [start, end];
+                }
+                return [0, size];
+            });
+    
+            const chunk = matrix.slice(sliceIndices);
             out.push(chunk);
     
-            start = end;  // Update the start index for the next iteration
+            start = end;
         }
     
         return out;
@@ -464,7 +483,6 @@ export class Tensor {
     }
 
     public to(device: Device): Tensor {
-        this.device = device;
         this.options.device = device;
         return this.assign(this);
     }

@@ -149,7 +149,7 @@ export class CausalSelfAttention extends Module {
         // calculate query, key, values for all heads in batch and move head forward to be the batch dim
 
         const c_attn_f = this.c_attn.forward(x);
-        let [q, k, v] = c_attn_f.split(this.n_embd);
+        let [q, k, v] = c_attn_f.split(this.n_embd, 2);
 
         k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
         q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);

@@ -150,21 +150,24 @@ export class Module {
         for (let state of entries) {
             const path = state[0];
             const tensor = state[1];
-
+            
             if (!namedParameters[path]) throw Error(`Layer ${path} not found`);
 
-            const t = new Tensor(tensor);
+            const modelTensor = namedParameters[path];
+
+            const t = new Tensor(tensor, {device: modelTensor.device});
             const stateTensorShape = t.shape.reduce((p, c) => p * c);
-            const modelParameterShape = namedParameters[path].shape.reduce((p, c) => p * c);
+            const modelParameterShape = modelTensor.shape.reduce((p, c) => p * c);
             if (stateTensorShape != modelParameterShape) throw Error(`State tensor shape (${stateTensorShape}) doesn't match model tensor shape (${modelParameterShape})`);
             
-            namedParameters[path].assign(t);
+            modelTensor.assign(t);
         }
     }
 
     public to<T extends Module>(this: T, device: Device): T {
         for (let parameter of this.parameters()) {
-            parameter.assign(parameter.to(device));
+            // parameter.assign(parameter.to(device));
+            parameter.to(device);
         }
         return this;
     }

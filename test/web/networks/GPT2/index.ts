@@ -1,10 +1,13 @@
-import { Tensor } from "../../../../src";
+import { Device, Tensor } from "../../../../src";
 import { StateDict } from "../../../../src/Module";
 
 import { GPT, NetworkConfig } from "./model";
 
-import fs from "fs";
-import path from "path";
+// import fs from "fs";
+// import path from "path";
+
+import textPathFile from './models/input.txt';
+import modelWeightsFile from './models/gpt-nano/model_weights.json';
 
 const modelWeightsPath = './models/gpt-nano/model_weights.json';
 const textPath = './models/input.txt';
@@ -29,8 +32,9 @@ class CharDataset {
 export class GPT2Demo {
     private trainDataset: CharDataset;
     private model: GPT;
+    private device: Device;
 
-    constructor() {
+    constructor(device: Device) {
         const gptNanoConfig: NetworkConfig = {
             n_head: 3,
             n_embd: 48,
@@ -42,21 +46,23 @@ export class GPT2Demo {
             vocab_size: 65, // 50257
             block_size: 128,
 
-            n_layer: 3
+            n_layer: 3,
+            
+            device: device
         }
 
-        const text = fs.readFileSync(path.join(__dirname, "/", textPath), "utf-8");
-        this.trainDataset = new CharDataset(text);
+        this.device = device;
+        this.trainDataset = new CharDataset(textPathFile);
         
-        this.model = new GPT(gptNanoConfig);
+        this.model = new GPT(gptNanoConfig).to(device);
     }
 
     public async run(): Promise<Tensor> {
-        const weights = await this.get_weights_from_file(modelWeightsPath);
-        this.model.load_state_dict(weights);
+        // const weights = await this.get_weights_from_file(modelWeightsPath);
+        this.model.load_state_dict(modelWeightsFile);
         
         const context = "O God, O God!"
-        const x = new Tensor(context.split("").map(v => this.trainDataset.stoi[v])).reshape([1, -1]);;
+        const x = new Tensor(context.split("").map(v => this.trainDataset.stoi[v]), {device: this.device}).reshape([1, -1]);
         const y = this.model.generate(x, 10, 1.0, true, 10).reshape([-1]);
 
         let completion = "";

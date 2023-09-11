@@ -29,20 +29,18 @@ export class Test {
     public async run(): Promise<boolean> {
         return new Promise<boolean>(resolve => {
             TestRunner.describe = async (name, func) => {
-                try {
-                    const st = performance.now();
-                    func();
+                const st = performance.now();
+                return Promise.resolve(func()).then((value) => {
                     this.duration = performance.now() - st;
                     this.result = TestResult.PASSED;
                     resolve(true);
                     return true;
-    
-                } catch (error) {
+                }).catch(error => {
                     console.log(error)
                     this.resultDescription = error;
                     this.result = TestResult.FAILED;
                     resolve(false);
-                }
+                })
             }
     
             this.func();

@@ -1,5 +1,5 @@
 import { Module, nn, Random, Tensor } from "../../../../src";
-import { Backend } from "../../../../src/backend/Backend";
+import { Backend, Device } from "../../../../src/backend/Backend";
 import { TensorBuffer } from "../../../../src/backend/TensorBuffer";
 
 Random.SetRandomSeed(1337);
@@ -82,13 +82,13 @@ export class NewGELU extends Module {
     }
 
     public forward(x: Tensor): Tensor {
-        const t1 = new Tensor(0.5);
-        const t2 = new Tensor(1.0);
-        const t4 = new Tensor(0.044715);
+        const t1 = new Tensor(0.5, {device: x.device});
+        const t2 = new Tensor(1.0, {device: x.device});
+        const t4 = new Tensor(0.044715, {device: x.device});
 
         const a = x.pow(3);
         const b = x.add(t4.mul(a));
-        const c = new Tensor(Math.sqrt(2.0 / Math.PI))
+        const c = new Tensor(Math.sqrt(2.0 / Math.PI), {device: x.device});
         const d = c.mul(b);
         const e = t2.add(d.tanh());
         const f = t1.mul(x).mul(e);
@@ -108,6 +108,8 @@ export interface NetworkConfig {
     block_size: number;
 
     n_layer: number;
+
+    device: Device;
 };
 
 export class CausalSelfAttention extends Module {
@@ -121,6 +123,8 @@ export class CausalSelfAttention extends Module {
     private n_embd: number;
 
     private bias: Tensor;
+
+    private config: NetworkConfig;
 
     constructor(config: NetworkConfig) {
         super();
@@ -137,10 +141,12 @@ export class CausalSelfAttention extends Module {
         this.resid_dropout = new nn.Dropout(config.resid_pdrop);
 
         // causal mask to ensure that attention is only applied to the left in the input sequence
-        this.bias = Tensor.ones([config.block_size, config.block_size]).tril().reshape([1,1,config.block_size,config.block_size]);
+        this.bias = Tensor.ones([config.block_size, config.block_size], {device: config.device}).tril().reshape([1,1,config.block_size,config.block_size]);
 
         this.n_head = config.n_head;
         this.n_embd = config.n_embd;
+
+        this.config = config;
     }
 
     public forward(x: Tensor): Tensor {
@@ -149,18 +155,30 @@ export class CausalSelfAttention extends Module {
         // calculate query, key, values for all heads in batch and move head forward to be the batch dim
 
         const c_attn_f = this.c_attn.forward(x);
-        let [q, k, v] = c_attn_f.split(this.n_embd);
+        // console.log(`c_attn_f ${c_attn_f.sum()} ${c_attn_f.mean()} ${c_attn_f.var()} ${c_attn_f.device} ${c_attn_f.shape} ${c_attn_f.strides}`);
+        // console.log("this.n_embd", this.n_embd);
+        let [q, k, v] = c_attn_f.split(this.n_embd, 2);
+        // console.log(`q ${q.mean()} ${q.device} ${q.shape} ${q.strides}`);
+        // console.log(`k ${k.mean()} ${k.device} ${k.shape} ${k.strides}`);
+        // console.log(`v ${v.mean()} ${v.device} ${v.shape} ${v.strides}`);
 
-        k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        v = v.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        // TODO: WebGL needs .getData, why?
+        k = new Tensor(k.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        q = new Tensor(q.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        v = new Tensor(v.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        
+        // k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        // q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        // v = v.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
 
         // causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        const t1 = new Tensor(1);
+        const t1 = new Tensor(1, {device: x.device});
         let att = q.matmul(k.transpose(-2, -1)).mul(t1.div( Math.sqrt(k.shape[k.shape.length-1]) ))
-        
+
         const biasSliced = this.bias.slice([null, null, [0, T], [0, T]]);
-        let maskedAttn = att.masked_fill(biasSliced.eq(0), 0);
+        const biasEq = new Tensor(biasSliced.data.getData(), {device: this.config.device});
+        const maskedAttn = att.masked_fill(biasEq.eq(0), 0);
+
 
         att = this.attn_dropout.forward(maskedAttn.softmax(-1));
 
@@ -215,7 +233,10 @@ export class Block extends Module {
     }
 
     public forward(x: Tensor): Tensor {
-        x = x.add(this.attn.forward(this.ln_1.forward(x)));
+        const ln_1_f = this.ln_1.forward(x);
+        const attn_f = this.attn.forward(ln_1_f);
+        x = x.add(attn_f);
+        
         x = x.add(this.mlpf(this.ln_2.forward(x)));
         return x;
     }
@@ -253,6 +274,8 @@ export class GPT extends Module {
     public transformer: Transformer;
     private lm_head: nn.Linear;
 
+    private config: NetworkConfig;
+
     constructor(config: NetworkConfig) {
         super();
         if (config.vocab_size === undefined) throw Error("config.vocab_size cannot be null");
@@ -270,23 +293,28 @@ export class GPT extends Module {
         for (let p of this.parameters()) {
             n_params += numel(p).data.get(0);
         }
+
+        this.config = config;
     }
 
     public forward(idx: Tensor, targets=null): Tensor {
         const [b, t] = idx.shape;
-        const pos = Tensor.arange(0, t).unsqueeze(0);
+        const pos = Tensor.arange(0, t, 1, {device: idx.device}).unsqueeze(0);
 
         const tok_emb = this.transformer.wte.forward(idx);
         const pos_emb = this.transformer.wpe.forward(pos);
 
+        
         let x = this.transformer.drop.forward(tok_emb.add(pos_emb));
 
+        
         for (let i = 0; i < this.transformer.h.length; i++) {
             const block = this.transformer.h[i];
             x = block.forward(x);
         }
 
         x = this.transformer.ln_f.forward(x);
+
         const logits = this.lm_head.forward(x);
 
         const loss = new Tensor(0);
@@ -304,12 +332,17 @@ export class GPT extends Module {
             let logits = this.forward(idx_cond);
 
             // pluck the logits at the final step and scale by desired temperature
-            const logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]).contiguous(); // TODO: Why contiguous
-            logits = logits_temp.div(temperature).reshape([1,65]);
+            const logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]);
+            const logits_temp_temp = new Tensor(logits_temp.data.getData(), {device: this.config.device});
+            // throw {
+            //     foo: logits_temp_temp,
+            //     error: new Error()
+            // };
+            logits = logits_temp_temp.div(temperature).reshape([1,65]);
             
             const probs = logits.softmax(-1);
 
-            let idx_next: Tensor
+            let idx_next: Tensor;
 
             if (do_sample) {
                 idx_next = multinomial(probs, 1, true);
@@ -319,8 +352,11 @@ export class GPT extends Module {
                 idx_next = new Tensor(0);
             }
 
+            const idxDevice = idx.device;
+            // console.log("idx", idx);
             // # append sampled index to the running sequence and continue
-            idx = cat([idx, idx_next], 1);
+            idx = cat([idx, idx_next], 1).to(idxDevice);
+            // console.log("idx", idx);
 
         }
         return idx;

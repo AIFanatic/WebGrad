@@ -457,6 +457,11 @@ var Texture = class {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       this.texture = texture;
     }
+    try {
+      throw Error("creator");
+    } catch (error) {
+      this.creator = error;
+    }
   }
   toString() {
     return `Texture(
@@ -490,9 +495,9 @@ var Texture = class {
     return this.data;
   }
   static shapeTo2d(shape) {
-    let shape2d = [1, shape[shape.length - 1]];
-    for (let i = shape.length - 1; i >= 0; i--) {
-      shape2d[0] *= shape[i];
+    let shape2d = [shape[0], 1];
+    for (let i = 1; i < shape.length; i++) {
+      shape2d[1] *= shape[i];
     }
     return shape2d;
   }
@@ -503,6 +508,15 @@ var Texture = class {
   //
   // TODO: The height is being increased if the pixels still dont fit the data.
   //       Is this enought or are there any exceptions?
+  // public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
+  //     const shape2D = Texture.shapeTo2d(shape);
+  //     const prodShape = shape2D.reduce((p, c) => p * c);
+  //     const width = Math.ceil(Math.sqrt(prodShape / channels));
+  //     let height = Math.floor(Math.sqrt(prodShape / channels));
+  //     if (width * height * channels < prodShape) height++;
+  //     if (width * height * channels < prodShape) throw Error("Couldnt get enough pixels to compute.");
+  //     return [width, height];
+  // }
   static calculateWidthAndHeightToFitShape(shape, channels) {
     const shape2D = Texture.shapeTo2d(shape);
     const prodShape = shape2D.reduce((p, c) => p * c);
@@ -761,11 +775,6 @@ var WEBGLBuffer = class extends TensorBuffer {
     if (!data || data === null)
       throw Error("Cannot create buffer with no data");
     super(shape, strides, offset, 1 /* WEBGL */);
-    if (data instanceof Texture) {
-      if (!equalArrays(data.originalShape, shape)) {
-        console.warn("Passed texture", data.originalShape, shape);
-      }
-    }
     if (data instanceof Float32Array)
       this.data = data;
     if (data instanceof Texture)
@@ -777,6 +786,11 @@ var WEBGLBuffer = class extends TensorBuffer {
         this.data = data.data;
       else if (data.texture)
         this.texture = data.texture;
+    }
+    try {
+      throw Error("creator");
+    } catch (error) {
+      this.creator = error;
     }
   }
   static CreateFromArray(array) {
@@ -801,7 +815,7 @@ var WEBGLBuffer = class extends TensorBuffer {
       throw Error("Tried to create unpacked texture without a data or texture field");
     if (this.texture) {
       if (!equalArrays(this.shape, this.texture.originalShape)) {
-        this.texture = Texture.createUnpackedFromShape(this.texture.read(), this.shape);
+        this.texture = this.copyToShape(this.shape).texture;
       }
       return this.texture;
     } else if (this.data) {
@@ -836,7 +850,9 @@ var WEBGLBuffer = class extends TensorBuffer {
     const inputTexture = this.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
         
         uniform sampler2D u_tex0;
 
@@ -871,6 +887,7 @@ var WEBGLBuffer = class extends TensorBuffer {
     const inputTextureY = other.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     WEBGLContext.runKernel(`#version 300 es
+        precision highp int;
         precision highp float;
         precision highp sampler2D;
 
@@ -913,6 +930,7 @@ var WEBGLBuffer = class extends TensorBuffer {
         { name: "u_op", value: op, type: 4 /* INT */ }
       ];
       WEBGLContext.runKernel(`#version 300 es
+            precision highp int;
             precision highp float;
             precision highp int;
             
@@ -975,7 +993,9 @@ var WEBGLBuffer = class extends TensorBuffer {
       { name: "u_axisLength", value: axisLength, type: 4 /* INT */ }
     ];
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
 
@@ -1004,7 +1024,7 @@ var WEBGLBuffer = class extends TensorBuffer {
     }
     let resultShape = calculateReducedShape(this.shape, axes, false);
     resultShape = resultShape.length === 0 ? resultShape = [1] : resultShape;
-    const r = new WEBGLBuffer(outputTexturePacked, outputTexturePacked.originalShape, TensorBuffer.computeStrides(outputTexturePacked.originalShape), this.offset);
+    const r = new WEBGLBuffer(outputTexturePacked, outputTexture.originalShape, TensorBuffer.computeStrides(outputTexture.originalShape), this.offset);
     return MovementOp.reshape(r, resultShape);
   }
   contiguous() {
@@ -1024,7 +1044,9 @@ var WEBGLBuffer = class extends TensorBuffer {
       { name: "shapeLength", value: this.shape.length, type: 4 /* INT */ }
     ];
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
 
@@ -1064,26 +1086,39 @@ var WEBGLBuffer = class extends TensorBuffer {
             float d = getData(u_tex0, width, index, offset, shape, strides, shapeLength);
             result = d;
         }`, [inputTexture], outputTexture, uniforms);
-    const v = this;
     const r = new WEBGLBuffer(outputTexture, this.shape, TensorBuffer.computeStrides(this.shape), this.offset);
     return r;
   }
   copyToShape(shape) {
     const inputTexture = this.texture;
     const outputTexture = Texture.createUnpackedFromShape(null, shape.slice());
+    const uniforms = [
+      { name: "widthIn", value: inputTexture.width, type: 4 /* INT */ },
+      { name: "widthOut", value: outputTexture.width, type: 4 /* INT */ }
+    ];
     WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
-
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
+        
         uniform sampler2D u_tex0;
+        uniform int widthIn;
+        uniform int widthOut;
 
-        out vec4 result;
+        out float result;
+
+        ivec2 getIndexCoords(int index) {
+            return ivec2(index % widthIn, index / widthIn);
+        }
 
         void main() {
-            ivec2 coords = ivec2(gl_FragCoord.xy);
+            int index = int(gl_FragCoord.x) + int(gl_FragCoord.y) * widthOut;
+            ivec2 coords = getIndexCoords(index);
+
             vec4 t1 = texelFetch(u_tex0, coords, 0);
         
-            result = t1;
-        }`, [inputTexture], outputTexture);
+            result = t1.r;
+        }`, [inputTexture], outputTexture, uniforms);
     return new WEBGLBuffer(outputTexture, shape, TensorBuffer.computeStrides(shape), this.offset);
   }
   toString() {
@@ -1151,6 +1186,9 @@ var Tensor = class {
   get offset() {
     return this.data.offset;
   }
+  get device() {
+    return this.data.device;
+  }
   constructor(data, options) {
     this.id = "P" + Math.floor(Math.random() * 1e6).toString().padStart(6, "0");
     const _options = Object.assign({}, DefaultTensorOptions, options);
@@ -1170,7 +1208,6 @@ var Tensor = class {
     else if (!isNaN(data))
       this.data = Backend.CreateFromNumber(_options.device, data);
     this.grad = Backend.CreateFromFloat32Array(_options.device, new Float32Array([0]), this.shape, TensorBuffer.computeStrides(this.shape));
-    this.device = _options.device;
     this.requires_grad = _options.requires_grad;
     this._op = _options._op;
     this._prev = new Set(_options._children);
@@ -1317,23 +1354,34 @@ var Tensor = class {
     const tb = Backend.CreateFromDataShapeAndStrides(this.data, newShape, newStrides, offset);
     return new Tensor(tb, { device: this.device, requires_grad: this.requires_grad });
   }
-  split(split_sizes, dim = null) {
-    if (Array.isArray(split_sizes))
-      throw Error("Split split_sizes as array not supported");
-    if (dim !== null)
-      throw Error("Split dim not supported");
-    const chunkSize = split_sizes;
-    const lastDim = this.shape[this.shape.length - 1];
-    if (lastDim % chunkSize !== 0) {
-      throw new Error("Invalid chunk size, not evenly divisible into last tensor dimension");
+  split(split_sizes, dim = 0) {
+    const matrix = this;
+    const dimSize = matrix.shape[dim];
+    let splitIntervals;
+    if (typeof split_sizes === "number") {
+      const numFullChunks = Math.floor(dimSize / split_sizes);
+      const lastChunkSize = dimSize - numFullChunks * split_sizes;
+      splitIntervals = Array(numFullChunks).fill(split_sizes);
+      if (lastChunkSize > 0) {
+        splitIntervals.push(lastChunkSize);
+      }
+    } else {
+      splitIntervals = split_sizes;
+      if (splitIntervals.reduce((acc, val) => acc + val, 0) !== dimSize) {
+        throw new Error("Sum of split sizes must equal the size of the dimension being split.");
+      }
     }
-    const numChunks = lastDim / chunkSize;
     const out = [];
     let start = 0;
-    for (let i = 0; i < numChunks; i++) {
-      let end = start + chunkSize;
-      const sliceIndices = this.shape.map((dimSize, idx) => idx === this.shape.length - 1 ? [start, end] : [0, dimSize]);
-      const chunk = this.slice(sliceIndices);
+    for (let size of splitIntervals) {
+      let end = start + size;
+      let sliceIndices = matrix.shape.map((size2, index) => {
+        if (index === dim) {
+          return [start, end];
+        }
+        return [0, size2];
+      });
+      const chunk = matrix.slice(sliceIndices);
       out.push(chunk);
       start = end;
     }
@@ -1501,7 +1549,6 @@ var Tensor = class {
     return this;
   }
   to(device) {
-    this.device = device;
     this.options.device = device;
     return this.assign(this);
   }
@@ -1623,17 +1670,18 @@ var Module = class {
       const tensor = state[1];
       if (!namedParameters[path])
         throw Error(`Layer ${path} not found`);
-      const t = new Tensor(tensor);
+      const modelTensor = namedParameters[path];
+      const t = new Tensor(tensor, { device: modelTensor.device });
       const stateTensorShape = t.shape.reduce((p, c) => p * c);
-      const modelParameterShape = namedParameters[path].shape.reduce((p, c) => p * c);
+      const modelParameterShape = modelTensor.shape.reduce((p, c) => p * c);
       if (stateTensorShape != modelParameterShape)
         throw Error(`State tensor shape (${stateTensorShape}) doesn't match model tensor shape (${modelParameterShape})`);
-      namedParameters[path].assign(t);
+      modelTensor.assign(t);
     }
   }
   to(device) {
     for (let parameter of this.parameters()) {
-      parameter.assign(parameter.to(device));
+      parameter.to(device);
     }
     return this;
   }
@@ -1785,10 +1833,6 @@ var Embedding = class extends Module {
     this.weight = Tensor.uniform(-1, 1, [num_embeddings, embedding_dim], { requires_grad: true });
     this.num_embeddings = num_embeddings;
     this.embedding_dim = embedding_dim;
-  }
-  getFirsts(v) {
-    const data = v.data.getData();
-    return [data[0][0][0], data[0][0][1], data[0][0][2]];
   }
   forward(x) {
     const va = Tensor.arange(0, this.num_embeddings, 1, { device: x.device });

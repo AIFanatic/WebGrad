@@ -575,7 +575,9 @@ export class WEBGLBuffer extends TensorBuffer {
         const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
 
         WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
         
         uniform sampler2D u_tex0;
 
@@ -607,6 +609,7 @@ export class WEBGLBuffer extends TensorBuffer {
         const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
 
         WEBGLContext.runKernel(`#version 300 es
+        precision highp int;
         precision highp float;
         precision highp sampler2D;
 
@@ -658,6 +661,7 @@ export class WEBGLBuffer extends TensorBuffer {
             ];
 
             WEBGLContext.runKernel(`#version 300 es
+            precision highp int;
             precision highp float;
             precision highp int;
             
@@ -727,7 +731,9 @@ export class WEBGLBuffer extends TensorBuffer {
         ];
 
         WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
 
@@ -787,7 +793,9 @@ export class WEBGLBuffer extends TensorBuffer {
         ];
 
         WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
 
         uniform sampler2D u_tex0;
 
@@ -842,7 +850,9 @@ export class WEBGLBuffer extends TensorBuffer {
         ];
 
         WEBGLContext.runKernel(`#version 300 es
-        precision mediump float;
+        precision highp int;
+        precision highp float;
+        precision highp sampler2D;
         
         uniform sampler2D u_tex0;
         uniform int widthIn;

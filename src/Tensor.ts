@@ -235,8 +235,7 @@ export class Tensor {
     }
 
     public split(split_sizes: number | number[], dim: number = 0): Tensor[] {
-        const matrix = this;
-        const dimSize = matrix.shape[dim];
+        const dimSize = this.shape[dim];
     
         let splitIntervals: number[];
     
@@ -263,14 +262,14 @@ export class Tensor {
             let end = start + size;
             
             // Prepare slice boundaries for all dimensions
-            let sliceIndices = matrix.shape.map((size, index) => {
+            let sliceIndices = this.shape.map((size, index) => {
                 if (index === dim) {
                     return [start, end];
                 }
                 return [0, size];
             });
     
-            const chunk = matrix.slice(sliceIndices);
+            const chunk = this.slice(sliceIndices);
             out.push(chunk);
     
             start = end;

@@ -643,6 +643,21 @@ function TensorTest(device: Device) {
         assert(equal(g.shape, [2,4]));
         assert(equal(g.strides, [4,1]));
     })
+
+    TestRunner.describe("Contiguous with slice", () => {
+        const data = [
+            [
+                [-0.4617, 2.0794, -0.3864, -11.851, -9.0403, -0.9475, 0.8994, -2.2933, -0.8202, -5.4271],
+                [-4.8378, -4.6949, -5.4385, -12.7535, -8.4812, -1.9216, -5.5221, -3.7003, -5.5581, -10.1265],
+            ]
+        ];
+        const a = new Tensor(data, {device: device});
+        const b = a.slice([null, [a.shape[1]-1, a.shape[1]], null]);
+        assert(equal(b, new Tensor([[[-4.8378,-4.6949,-5.4385,-12.7535,-8.4812,-1.9216,-5.5221,-3.7003,-5.5581,-10.1265]]])));
+        
+        const c = b.contiguous();
+        assert(equal(c, new Tensor([[[-4.8378,-4.6949,-5.4385,-12.7535,-8.4812,-1.9216,-5.5221,-3.7003,-5.5581,-10.1265]]])));
+    })
     
     TestRunner.describe("Tril", () => {
         const a = new Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], {device: device});

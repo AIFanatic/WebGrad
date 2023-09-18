@@ -457,36 +457,17 @@ var Texture = class {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       this.texture = texture;
     }
-    try {
-      throw Error("creator");
-    } catch (error) {
-      this.creator = error;
-    }
   }
   toString() {
     return `Texture(
             data=[${this.data}],
             width=${this.width},
             height=${this.height},
-            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)}
+            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)},
+            originalShape=${this.originalShape},
             format=${WEBGLContext.glCodeToStr(this.format)},
             type=${WEBGLContext.glCodeToStr(this.type)}
         )`;
-  }
-  decodeMatrixFromUnpackedArray(unpackedArray, matrix, channelsPerTexture) {
-    function getMatrixSizeFromUnpackedArraySize(unpackedSize, channelsPerTexture2) {
-      if (unpackedSize % channelsPerTexture2 !== 0) {
-        throw new Error(`unpackedSize (${unpackedSize}) must be a multiple of ${channelsPerTexture2}`);
-      }
-      return unpackedSize / channelsPerTexture2;
-    }
-    const requiredSize = getMatrixSizeFromUnpackedArraySize(unpackedArray.length, channelsPerTexture);
-    if (matrix.length < requiredSize)
-      throw new Error(`matrix length (${matrix.length}) must be >= ${requiredSize}`);
-    let dst = 0;
-    for (let src = 0; src < unpackedArray.length; src += channelsPerTexture) {
-      matrix[dst++] = unpackedArray[src];
-    }
   }
   read() {
     if (this.data)
@@ -495,9 +476,9 @@ var Texture = class {
     return this.data;
   }
   static shapeTo2d(shape) {
-    let shape2d = [shape[0], 1];
-    for (let i = 1; i < shape.length; i++) {
-      shape2d[1] *= shape[i];
+    let shape2d = [1, shape[shape.length - 1]];
+    for (let i = shape.length - 1; i >= 0; i--) {
+      shape2d[0] *= shape[i];
     }
     return shape2d;
   }
@@ -508,15 +489,6 @@ var Texture = class {
   //
   // TODO: The height is being increased if the pixels still dont fit the data.
   //       Is this enought or are there any exceptions?
-  // public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
-  //     const shape2D = Texture.shapeTo2d(shape);
-  //     const prodShape = shape2D.reduce((p, c) => p * c);
-  //     const width = Math.ceil(Math.sqrt(prodShape / channels));
-  //     let height = Math.floor(Math.sqrt(prodShape / channels));
-  //     if (width * height * channels < prodShape) height++;
-  //     if (width * height * channels < prodShape) throw Error("Couldnt get enough pixels to compute.");
-  //     return [width, height];
-  // }
   static calculateWidthAndHeightToFitShape(shape, channels) {
     const shape2D = Texture.shapeTo2d(shape);
     const prodShape = shape2D.reduce((p, c) => p * c);
@@ -593,18 +565,14 @@ var _WEBGLContext = class {
   constructor() {
     throw Error("Cannot call WEBGLContext with new.");
   }
-  static hashCode(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++)
-      h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-    return h;
-  }
   static setup() {
     if (typeof window === "undefined")
       throw Error("Window not found, WebGL2 is only supported in browsers.");
     if (typeof document === "undefined")
       throw Error("Document not found, WebGL2 is only supported in browsers.");
     const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
     const gl = canvas.getContext("webgl2");
     if (!gl)
       throw Error("Could not setup WebGL2");
@@ -613,7 +581,6 @@ var _WEBGLContext = class {
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    document.body.appendChild(canvas);
     return gl;
   }
   static compileShader(gl, shaderType, shaderCode) {
@@ -673,8 +640,9 @@ var _WEBGLContext = class {
       const value = uniforms[i].value;
       const type = uniforms[i].type;
       const location = gl.getUniformLocation(program, name);
-      if (location === null)
-        throw Error(`Got null uniform location ${name} ${value}`);
+      if (location === null) {
+        console.warn(`Got null uniform location ${name} ${value}`);
+      }
       if (value instanceof Array) {
         if (type === 8 /* FLOAT_ARRAY */)
           gl.uniform1fv(location, value);
@@ -786,11 +754,6 @@ var WEBGLBuffer = class extends TensorBuffer {
         this.data = data.data;
       else if (data.texture)
         this.texture = data.texture;
-    }
-    try {
-      throw Error("creator");
-    } catch (error) {
-      this.creator = error;
     }
   }
   static CreateFromArray(array) {
@@ -1028,6 +991,10 @@ var WEBGLBuffer = class extends TensorBuffer {
     return MovementOp.reshape(r, resultShape);
   }
   contiguous() {
+    function computeStorageLength(size, stride) {
+      const lastPositions = size.map((s, i) => s * stride[i]);
+      return Math.max(...lastPositions);
+    }
     const inputTexture = this.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     const MAX_DIMS = 10;
@@ -1041,7 +1008,8 @@ var WEBGLBuffer = class extends TensorBuffer {
       { name: "shape", value: this.shape, type: 9 /* INT_ARRAY */ },
       { name: "strides", value: this.strides, type: 9 /* INT_ARRAY */ },
       { name: "offset", value: this.offset, type: 4 /* INT */ },
-      { name: "shapeLength", value: this.shape.length, type: 4 /* INT */ }
+      { name: "shapeLength", value: this.shape.length, type: 4 /* INT */ },
+      { name: "dataSize", value: computeStorageLength(this.shape, this.strides), type: 4 /* INT */ }
     ];
     WEBGLContext.runKernel(`#version 300 es
         precision highp int;
@@ -1060,7 +1028,8 @@ var WEBGLBuffer = class extends TensorBuffer {
         uniform int[10] strides;
         uniform int offset;
         uniform int shapeLength;
-
+        uniform int dataSize;
+    
         float getData(sampler2D tensor, int width, int i, int offset, int[MAX_DIMS] shape, int[MAX_DIMS] strides, int numDims) {
             int idx = 0;
             int totalSize = 1;
@@ -1076,7 +1045,10 @@ var WEBGLBuffer = class extends TensorBuffer {
                 idx += strides[dim] * coord;
             }
             idx += offset;
-        
+
+            // If condition should not be needed but var fails if removed
+            if (offset != 0) idx %= dataSize;
+            
             ivec2 coords = ivec2(idx % width, idx / width);
             return texelFetch(tensor, coords, 0).r;
         }
@@ -1355,8 +1327,7 @@ var Tensor = class {
     return new Tensor(tb, { device: this.device, requires_grad: this.requires_grad });
   }
   split(split_sizes, dim = 0) {
-    const matrix = this;
-    const dimSize = matrix.shape[dim];
+    const dimSize = this.shape[dim];
     let splitIntervals;
     if (typeof split_sizes === "number") {
       const numFullChunks = Math.floor(dimSize / split_sizes);
@@ -1375,13 +1346,13 @@ var Tensor = class {
     let start = 0;
     for (let size of splitIntervals) {
       let end = start + size;
-      let sliceIndices = matrix.shape.map((size2, index) => {
+      let sliceIndices = this.shape.map((size2, index) => {
         if (index === dim) {
           return [start, end];
         }
         return [0, size2];
       });
-      const chunk = matrix.slice(sliceIndices);
+      const chunk = this.slice(sliceIndices);
       out.push(chunk);
       start = end;
     }

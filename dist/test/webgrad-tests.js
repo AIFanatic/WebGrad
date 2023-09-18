@@ -457,36 +457,17 @@ var Texture = class {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       this.texture = texture;
     }
-    try {
-      throw Error("creator");
-    } catch (error) {
-      this.creator = error;
-    }
   }
   toString() {
     return `Texture(
             data=[${this.data}],
             width=${this.width},
             height=${this.height},
-            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)}
+            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)},
+            originalShape=${this.originalShape},
             format=${WEBGLContext.glCodeToStr(this.format)},
             type=${WEBGLContext.glCodeToStr(this.type)}
         )`;
-  }
-  decodeMatrixFromUnpackedArray(unpackedArray, matrix, channelsPerTexture) {
-    function getMatrixSizeFromUnpackedArraySize(unpackedSize, channelsPerTexture2) {
-      if (unpackedSize % channelsPerTexture2 !== 0) {
-        throw new Error(`unpackedSize (${unpackedSize}) must be a multiple of ${channelsPerTexture2}`);
-      }
-      return unpackedSize / channelsPerTexture2;
-    }
-    const requiredSize = getMatrixSizeFromUnpackedArraySize(unpackedArray.length, channelsPerTexture);
-    if (matrix.length < requiredSize)
-      throw new Error(`matrix length (${matrix.length}) must be >= ${requiredSize}`);
-    let dst = 0;
-    for (let src = 0; src < unpackedArray.length; src += channelsPerTexture) {
-      matrix[dst++] = unpackedArray[src];
-    }
   }
   read() {
     if (this.data)
@@ -495,9 +476,9 @@ var Texture = class {
     return this.data;
   }
   static shapeTo2d(shape) {
-    let shape2d = [shape[0], 1];
-    for (let i = 1; i < shape.length; i++) {
-      shape2d[1] *= shape[i];
+    let shape2d = [1, shape[shape.length - 1]];
+    for (let i = shape.length - 1; i >= 0; i--) {
+      shape2d[0] *= shape[i];
     }
     return shape2d;
   }
@@ -508,15 +489,6 @@ var Texture = class {
   //
   // TODO: The height is being increased if the pixels still dont fit the data.
   //       Is this enought or are there any exceptions?
-  // public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
-  //     const shape2D = Texture.shapeTo2d(shape);
-  //     const prodShape = shape2D.reduce((p, c) => p * c);
-  //     const width = Math.ceil(Math.sqrt(prodShape / channels));
-  //     let height = Math.floor(Math.sqrt(prodShape / channels));
-  //     if (width * height * channels < prodShape) height++;
-  //     if (width * height * channels < prodShape) throw Error("Couldnt get enough pixels to compute.");
-  //     return [width, height];
-  // }
   static calculateWidthAndHeightToFitShape(shape, channels) {
     const shape2D = Texture.shapeTo2d(shape);
     const prodShape = shape2D.reduce((p, c) => p * c);
@@ -593,18 +565,14 @@ var _WEBGLContext = class {
   constructor() {
     throw Error("Cannot call WEBGLContext with new.");
   }
-  static hashCode(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++)
-      h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-    return h;
-  }
   static setup() {
     if (typeof window === "undefined")
       throw Error("Window not found, WebGL2 is only supported in browsers.");
     if (typeof document === "undefined")
       throw Error("Document not found, WebGL2 is only supported in browsers.");
     const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
     const gl = canvas.getContext("webgl2");
     if (!gl)
       throw Error("Could not setup WebGL2");
@@ -613,7 +581,6 @@ var _WEBGLContext = class {
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    document.body.appendChild(canvas);
     return gl;
   }
   static compileShader(gl, shaderType, shaderCode) {
@@ -673,8 +640,9 @@ var _WEBGLContext = class {
       const value = uniforms[i].value;
       const type = uniforms[i].type;
       const location = gl.getUniformLocation(program, name);
-      if (location === null)
-        throw Error(`Got null uniform location ${name} ${value}`);
+      if (location === null) {
+        console.warn(`Got null uniform location ${name} ${value}`);
+      }
       if (value instanceof Array) {
         if (type === 8 /* FLOAT_ARRAY */)
           gl.uniform1fv(location, value);
@@ -786,11 +754,6 @@ var WEBGLBuffer = class extends TensorBuffer {
         this.data = data.data;
       else if (data.texture)
         this.texture = data.texture;
-    }
-    try {
-      throw Error("creator");
-    } catch (error) {
-      this.creator = error;
     }
   }
   static CreateFromArray(array) {
@@ -1028,6 +991,10 @@ var WEBGLBuffer = class extends TensorBuffer {
     return MovementOp.reshape(r, resultShape);
   }
   contiguous() {
+    function computeStorageLength(size, stride) {
+      const lastPositions = size.map((s, i) => s * stride[i]);
+      return Math.max(...lastPositions);
+    }
     const inputTexture = this.createUnpackedTexture();
     const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
     const MAX_DIMS = 10;
@@ -1041,7 +1008,8 @@ var WEBGLBuffer = class extends TensorBuffer {
       { name: "shape", value: this.shape, type: 9 /* INT_ARRAY */ },
       { name: "strides", value: this.strides, type: 9 /* INT_ARRAY */ },
       { name: "offset", value: this.offset, type: 4 /* INT */ },
-      { name: "shapeLength", value: this.shape.length, type: 4 /* INT */ }
+      { name: "shapeLength", value: this.shape.length, type: 4 /* INT */ },
+      { name: "dataSize", value: computeStorageLength(this.shape, this.strides), type: 4 /* INT */ }
     ];
     WEBGLContext.runKernel(`#version 300 es
         precision highp int;
@@ -1060,7 +1028,8 @@ var WEBGLBuffer = class extends TensorBuffer {
         uniform int[10] strides;
         uniform int offset;
         uniform int shapeLength;
-
+        uniform int dataSize;
+    
         float getData(sampler2D tensor, int width, int i, int offset, int[MAX_DIMS] shape, int[MAX_DIMS] strides, int numDims) {
             int idx = 0;
             int totalSize = 1;
@@ -1076,7 +1045,10 @@ var WEBGLBuffer = class extends TensorBuffer {
                 idx += strides[dim] * coord;
             }
             idx += offset;
-        
+
+            // If condition should not be needed but var fails if removed
+            if (offset != 0) idx %= dataSize;
+            
             ivec2 coords = ivec2(idx % width, idx / width);
             return texelFetch(tensor, coords, 0).r;
         }
@@ -1354,63 +1326,8 @@ var Tensor = class {
     const tb = Backend.CreateFromDataShapeAndStrides(this.data, newShape, newStrides, offset);
     return new Tensor(tb, { device: this.device, requires_grad: this.requires_grad });
   }
-  // public split(split_sizes: number | number[], dim: null | number = null): Tensor[] {
-  //     if (Array.isArray(split_sizes)) throw Error("Split split_sizes as array not supported");
-  //     if (dim !== null) throw Error("Split dim not supported");
-  //     const chunkSize = split_sizes;
-  //     const lastDim = this.shape[this.shape.length - 1];
-  //     if (lastDim % chunkSize !== 0) {
-  //         throw new Error('Invalid chunk size, not evenly divisible into last tensor dimension');
-  //     }
-  //     const numChunks = lastDim / chunkSize;
-  //     const out: Tensor[] = [];
-  //     console.log("numChunks", split_sizes, lastDim, chunkSize);
-  //     let start = 0;
-  //     for (let i = 0; i < numChunks; i++) {
-  //         let end = start + chunkSize;
-  //         const sliceIndices = this.shape.map((dimSize, idx) => idx === this.shape.length - 1 ? [start, end] : [0, dimSize]);
-  //         const chunk = this.slice(sliceIndices);
-  //         out.push(chunk);
-  //         start = end;  // Update the start index for the next iteration
-  //     }
-  //     return out;
-  // }
-  // public split(split_sizes: number | number[], dim: null | number = 0): Tensor[] {
-  //     const tensor = this;
-  //     if (dim !== 0) throw Error("Only dim=0 is supported for splitting");
-  //     let splitIntervals: number[];
-  //     const firstDim = tensor.shape[0];
-  //     // Determine the intervals to split based on split_sizes
-  //     if (typeof split_sizes === 'number') {
-  //         const numFullChunks = Math.floor(firstDim / split_sizes);
-  //         const lastChunkSize = firstDim - (numFullChunks * split_sizes);
-  //         splitIntervals = Array(numFullChunks).fill(split_sizes);
-  //         if (lastChunkSize > 0) {
-  //             splitIntervals.push(lastChunkSize);
-  //         }
-  //     } else {
-  //         splitIntervals = split_sizes;
-  //         if (splitIntervals.reduce((acc, val) => acc + val, 0) !== firstDim) {
-  //             throw new Error("Sum of split sizes must equal the size of the dimension being split.");
-  //         }
-  //     }
-  //     const out: Tensor[] = [];
-  //     let start = 0;
-  //     for (let size of splitIntervals) {
-  //         let end = start + size;
-  //         const sliceIndices = [
-  //             [start, end],
-  //             [0, tensor.shape[1]]
-  //         ];
-  //         const chunk = tensor.slice(sliceIndices);
-  //         out.push(chunk);
-  //         start = end;
-  //     }
-  //     return out;
-  // }
   split(split_sizes, dim = 0) {
-    const matrix = this;
-    const dimSize = matrix.shape[dim];
+    const dimSize = this.shape[dim];
     let splitIntervals;
     if (typeof split_sizes === "number") {
       const numFullChunks = Math.floor(dimSize / split_sizes);
@@ -1429,13 +1346,13 @@ var Tensor = class {
     let start = 0;
     for (let size of splitIntervals) {
       let end = start + size;
-      let sliceIndices = matrix.shape.map((size2, index) => {
+      let sliceIndices = this.shape.map((size2, index) => {
         if (index === dim) {
           return [start, end];
         }
         return [0, size2];
       });
-      const chunk = matrix.slice(sliceIndices);
+      const chunk = this.slice(sliceIndices);
       out.push(chunk);
       start = end;
     }
@@ -3663,6 +3580,19 @@ function TensorTest(device) {
     assert(equal(g.shape, [2, 4]));
     assert(equal(g.strides, [4, 1]));
   });
+  TestRunner.describe("Contiguous with slice", () => {
+    const data = [
+      [
+        [-0.4617, 2.0794, -0.3864, -11.851, -9.0403, -0.9475, 0.8994, -2.2933, -0.8202, -5.4271],
+        [-4.8378, -4.6949, -5.4385, -12.7535, -8.4812, -1.9216, -5.5221, -3.7003, -5.5581, -10.1265]
+      ]
+    ];
+    const a = new Tensor(data, { device });
+    const b = a.slice([null, [a.shape[1] - 1, a.shape[1]], null]);
+    assert(equal(b, new Tensor([[[-4.8378, -4.6949, -5.4385, -12.7535, -8.4812, -1.9216, -5.5221, -3.7003, -5.5581, -10.1265]]])));
+    const c = b.contiguous();
+    assert(equal(c, new Tensor([[[-4.8378, -4.6949, -5.4385, -12.7535, -8.4812, -1.9216, -5.5221, -3.7003, -5.5581, -10.1265]]])));
+  });
   TestRunner.describe("Tril", () => {
     const a = new Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], { device });
     const b = a.tril();
@@ -3692,13 +3622,22 @@ var TensorTests = { category: "Tensor", func: TensorTest };
 
 // test/web/Test.test.ts
 function TestTest(device) {
-  TestRunner.describe("Split2", () => {
+  TestRunner.describe("Slice", () => {
     Random.SetRandomSeed(1337);
-    const n_embd = 48;
-    const shape = [1, 13, 144];
-    const a = Tensor.rand(shape, { device });
-    const [q, k, v] = a.split(n_embd, 2);
-    console.log(q.data.getData().flat(Infinity));
+    console.log(Device[device]);
+    const data = [
+      [
+        [-0.4617, 2.0794, -0.3864, -11.851, -9.0403, -0.9475, 0.8994, -2.2933, -0.8202, -5.4271],
+        [-4.8378, -4.6949, -5.4385, -12.7535, -8.4812, -1.9216, -5.5221, -3.7003, -5.5581, -10.1265]
+      ]
+    ];
+    console.log();
+    const a = new Tensor(data, { device });
+    console.log(`a ${a} ${a.shape} ${a.strides}`);
+    const b = a.slice([null, [a.shape[1] - 1, a.shape[1]], null]);
+    console.log(`b ${b} ${b.shape} ${b.strides} ${b.offset}`);
+    const c = b.contiguous();
+    console.log(`c ${c} ${c.shape} ${c.strides} ${c.offset}`);
   });
 }
 var TestTests = { category: "Test", func: TestTest };
@@ -3911,14 +3850,13 @@ var CausalSelfAttention = class extends Module {
     const [B, T, C] = x.shape;
     const c_attn_f = this.c_attn.forward(x);
     let [q, k, v] = c_attn_f.split(this.n_embd, 2);
-    k = new Tensor(k.data.getData(), { device: this.config.device }).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
-    q = new Tensor(q.data.getData(), { device: this.config.device }).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
-    v = new Tensor(v.data.getData(), { device: this.config.device }).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
+    k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
+    q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
+    v = v.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1, 2);
     const t1 = new Tensor(1, { device: x.device });
     let att = q.matmul(k.transpose(-2, -1)).mul(t1.div(Math.sqrt(k.shape[k.shape.length - 1])));
     const biasSliced = this.bias.slice([null, null, [0, T], [0, T]]);
-    const biasEq = new Tensor(biasSliced.data.getData(), { device: this.config.device });
-    const maskedAttn = att.masked_fill(biasEq.eq(0), 0);
+    const maskedAttn = att.masked_fill(biasSliced.eq(0), 0);
     att = this.attn_dropout.forward(maskedAttn.softmax(-1));
     let y = att.matmul(v);
     y = y.transpose(1, 2).contiguous().reshape([B, T, C]);
@@ -4009,9 +3947,9 @@ var GPT = class extends Module {
     for (let i = 0; i < max_new_tokens; i++) {
       const idx_cond = idx.shape[1] < this.block_size ? idx : new Tensor(idx.data);
       let logits = this.forward(idx_cond);
-      const logits_temp = logits.slice([null, [logits.shape[1] - 1, logits.shape[1]], null]);
-      const logits_temp_temp = new Tensor(logits_temp.data.getData(), { device: this.config.device });
-      logits = logits_temp_temp.div(temperature).reshape([1, 65]);
+      let logits_temp = logits.slice([null, [logits.shape[1] - 1, logits.shape[1]], null]);
+      logits_temp = logits_temp.contiguous();
+      logits = logits_temp.div(temperature).reshape([1, 65]);
       const probs = logits.softmax(-1);
       let idx_next;
       if (do_sample) {

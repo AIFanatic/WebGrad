@@ -57,8 +57,6 @@ export class Texture {
     public readonly texture: WebGLTexture;
     public readonly originalShape: number[];
 
-    public creator: string;
-
     constructor(data: Float32Array | null, info: ITextureInfo) {
         if (data === undefined) throw Error("Got undefined data");
 
@@ -88,12 +86,6 @@ export class Texture {
 
             this.texture = texture;
         }
-
-        try {
-            throw Error("creator");
-        } catch (error) {
-            this.creator = error;
-        }
     }
 
     public toString() {
@@ -101,27 +93,11 @@ export class Texture {
             data=[${this.data}],
             width=${this.width},
             height=${this.height},
-            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)}
+            internalFormat=${WEBGLContext.glCodeToStr(this.internalFormat)},
+            originalShape=${this.originalShape},
             format=${WEBGLContext.glCodeToStr(this.format)},
             type=${WEBGLContext.glCodeToStr(this.type)}
         )`
-    }
-
-    private decodeMatrixFromUnpackedArray(unpackedArray: Float32Array, matrix: Float32Array, channelsPerTexture: number) {
-        function getMatrixSizeFromUnpackedArraySize(unpackedSize: number, channelsPerTexture: number): number {
-            if (unpackedSize % channelsPerTexture !== 0) {
-                throw new Error(`unpackedSize (${unpackedSize}) must be a multiple of ${channelsPerTexture}`);
-            }
-            return unpackedSize / channelsPerTexture;
-        }
-
-        const requiredSize = getMatrixSizeFromUnpackedArraySize(unpackedArray.length, channelsPerTexture);
-        if (matrix.length < requiredSize) throw new Error(`matrix length (${matrix.length}) must be >= ${requiredSize}`);
-
-        let dst = 0;
-        for (let src = 0; src < unpackedArray.length; src += channelsPerTexture) {
-            matrix[dst++] = unpackedArray[src];
-        }
     }
 
     public read(): Float32Array {
@@ -133,17 +109,17 @@ export class Texture {
     }
 
     public static shapeTo2d(shape: number[]): [number, number] {
-        let shape2d: [number, number] = [shape[0], 1];
-        for (let i = 1; i < shape.length; i++) {
-            shape2d[1] *= shape[i];
-        }
-        return shape2d;
-
-        // let shape2d: [number, number] = [1, shape[shape.length - 1]];
-        // for (let i = shape.length - 1; i >= 0; i--) {
-        //     shape2d[0] *= shape[i];
+        // let shape2d: [number, number] = [shape[0], 1];
+        // for (let i = 1; i < shape.length; i++) {
+        //     shape2d[1] *= shape[i];
         // }
         // return shape2d;
+
+        let shape2d: [number, number] = [1, shape[shape.length - 1]];
+        for (let i = shape.length - 1; i >= 0; i--) {
+            shape2d[0] *= shape[i];
+        }
+        return shape2d;
     }
 
     // Computes the width and height necessary to fit in an RGBA texture.
@@ -153,18 +129,6 @@ export class Texture {
     //
     // TODO: The height is being increased if the pixels still dont fit the data.
     //       Is this enought or are there any exceptions?
-    // public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
-    //     const shape2D = Texture.shapeTo2d(shape);
-    //     const prodShape = shape2D.reduce((p, c) => p * c);
-
-    //     const width = Math.ceil(Math.sqrt(prodShape / channels));
-    //     let height = Math.floor(Math.sqrt(prodShape / channels));
-
-    //     if (width * height * channels < prodShape) height++;
-    //     if (width * height * channels < prodShape) throw Error("Couldnt get enough pixels to compute.");
-
-    //     return [width, height];
-    // }
     public static calculateWidthAndHeightToFitShape(shape: number[], channels: number): [number, number] {
         const shape2D = Texture.shapeTo2d(shape);
         const prodShape = shape2D.reduce((p, c) => p * c);
@@ -276,21 +240,13 @@ export class WEBGLContext {
         throw Error("Cannot call WEBGLContext with new.");
     }
 
-    private static hashCode(s) {
-        let h = 0;
-        for (let i = 0; i < s.length; i++)
-            h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-
-        return h;
-    }
-
     private static setup(): WebGL2RenderingContext {
         if (typeof window === "undefined") throw Error("Window not found, WebGL2 is only supported in browsers.");
         if (typeof document === "undefined") throw Error("Document not found, WebGL2 is only supported in browsers.");
 
         const canvas = document.createElement("canvas");
-        // canvas.width = 512;
-        // canvas.height = 512;
+        canvas.width = 1;
+        canvas.height = 1;
 
         const gl = canvas.getContext("webgl2");
         if (!gl) throw Error("Could not setup WebGL2");
@@ -299,8 +255,6 @@ export class WEBGLContext {
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-
-        document.body.appendChild(canvas);
 
         return gl;
     }
@@ -376,7 +330,9 @@ export class WEBGLContext {
             const type = uniforms[i].type;
 
             const location = gl.getUniformLocation(program, name);
-            if (location === null) throw Error(`Got null uniform location ${name} ${value}`)
+            if (location === null) {
+                console.warn(`Got null uniform location ${name} ${value}`)
+            }
 
             if (value instanceof Array) {
                 if (type === UniformType.FLOAT_ARRAY) gl.uniform1fv(location, value);
@@ -483,18 +439,10 @@ export class WEBGLBuffer extends TensorBuffer {
     public data: Float32Array;
     public texture: Texture;
 
-    public creator: string;
-
     constructor(data: WEBGLBuffer | Texture | Float32Array, shape: number[], strides: number[], offset: number) {
         if (!data || data === null) throw Error("Cannot create buffer with no data");
 
         super(shape, strides, offset, Device.WEBGL);
-
-        // if (data instanceof Texture) {
-        //     if (!equalArrays(data.originalShape, shape)) {
-        //         console.warn("Passed texture", data.originalShape, shape);
-        //     }
-        // }
         
         if (data instanceof Float32Array) this.data = data;
         if (data instanceof Texture) this.texture = data;
@@ -502,12 +450,6 @@ export class WEBGLBuffer extends TensorBuffer {
             if (!data.data && !data.texture) throw Error("Tried to create WEBGLBuffer with no data or texture.");
             if (data.data) this.data = data.data;
             else if (data.texture) this.texture = data.texture;
-        }
-
-        try {
-            throw Error("creator");
-        } catch (error) {
-            this.creator = error;
         }
     }
 
@@ -645,9 +587,6 @@ export class WEBGLBuffer extends TensorBuffer {
             return array.reduce((p, c) => p * c);
         }
 
-        // console.log(`input ${this.texture.read()} ${this.shape} ${this.strides} ${axes}`);
-        // console.log(`axes ${axes}`);
-
         const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
 
         function sumDim(input: Texture, shape: number[], stride: number): Texture {
@@ -717,7 +656,6 @@ export class WEBGLBuffer extends TensorBuffer {
 
         const totalNumberOfElements = prod(this.shape);
         while (stride < totalNumberOfElements) {
-            // console.log(`${outputTexture.read()}`)
             outputTexture = sumDim(outputTexture, this.shape, stride);
             stride *= 2;
         }
@@ -754,9 +692,6 @@ export class WEBGLBuffer extends TensorBuffer {
             result = t1.r;
         }`, [outputTexture], outputTexturePacked, uniforms);
 
-        // console.timeEnd("reduce_op");
-
-
         function calculateReducedShape(originalShape, axes, keepdim = false) {
             if (!keepdim) {
                 return originalShape.filter((_, index) => !axes.includes(index));
@@ -774,10 +709,16 @@ export class WEBGLBuffer extends TensorBuffer {
     }
 
     public contiguous(): WEBGLBuffer {
+        function computeStorageLength(size, stride) {
+            // Calculate the storage position of the last element for each dimension
+            const lastPositions = size.map((s, i) => s * stride[i]);
+        
+            // Find the maximum of these positions and add the offset
+            return Math.max(...lastPositions); // + offset?
+        }
+
         const inputTexture = this.createUnpackedTexture();
         const outputTexture = Texture.createUnpackedFromShape(null, this.shape);
-        
-        // console.log("CALLED CONTIGUOS", inputTexture.read());
 
         const MAX_DIMS = 10;
         if (this.shape.length !== this.strides.length) throw Error("Shape does not match strides");
@@ -790,7 +731,10 @@ export class WEBGLBuffer extends TensorBuffer {
             { name: "strides", value: this.strides, type: UniformType.INT_ARRAY },
             { name: "offset", value: this.offset, type: UniformType.INT },
             { name: "shapeLength", value: this.shape.length, type: UniformType.INT },
+            { name: "dataSize", value: computeStorageLength(this.shape, this.strides), type: UniformType.INT },
         ];
+
+        // console.log(uniforms)
 
         WEBGLContext.runKernel(`#version 300 es
         precision highp int;
@@ -809,7 +753,8 @@ export class WEBGLBuffer extends TensorBuffer {
         uniform int[10] strides;
         uniform int offset;
         uniform int shapeLength;
-
+        uniform int dataSize;
+    
         float getData(sampler2D tensor, int width, int i, int offset, int[MAX_DIMS] shape, int[MAX_DIMS] strides, int numDims) {
             int idx = 0;
             int totalSize = 1;
@@ -825,7 +770,10 @@ export class WEBGLBuffer extends TensorBuffer {
                 idx += strides[dim] * coord;
             }
             idx += offset;
-        
+
+            // If condition should not be needed but var fails if removed
+            if (offset != 0) idx %= dataSize;
+            
             ivec2 coords = ivec2(idx % width, idx / width);
             return texelFetch(tensor, coords, 0).r;
         }

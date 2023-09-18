@@ -158,27 +158,16 @@ export class CausalSelfAttention extends Module {
         // console.log(`c_attn_f ${c_attn_f.sum()} ${c_attn_f.mean()} ${c_attn_f.var()} ${c_attn_f.device} ${c_attn_f.shape} ${c_attn_f.strides}`);
         // console.log("this.n_embd", this.n_embd);
         let [q, k, v] = c_attn_f.split(this.n_embd, 2);
-        // console.log(`q ${q.mean()} ${q.device} ${q.shape} ${q.strides}`);
-        // console.log(`k ${k.mean()} ${k.device} ${k.shape} ${k.strides}`);
-        // console.log(`v ${v.mean()} ${v.device} ${v.shape} ${v.strides}`);
-
-        // TODO: WebGL needs .getData, why?
-        k = new Tensor(k.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        q = new Tensor(q.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        v = new Tensor(v.data.getData(), {device: this.config.device}).reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        
-        // k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        // q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
-        // v = v.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        k = k.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        q = q.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
+        v = v.reshape([B, T, this.n_head, Math.floor(C / this.n_head)]).transpose(1,2);
 
         // causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         const t1 = new Tensor(1, {device: x.device});
         let att = q.matmul(k.transpose(-2, -1)).mul(t1.div( Math.sqrt(k.shape[k.shape.length-1]) ))
 
         const biasSliced = this.bias.slice([null, null, [0, T], [0, T]]);
-        const biasEq = new Tensor(biasSliced.data.getData(), {device: this.config.device});
-        const maskedAttn = att.masked_fill(biasEq.eq(0), 0);
-
+        const maskedAttn = att.masked_fill(biasSliced.eq(0), 0);
 
         att = this.attn_dropout.forward(maskedAttn.softmax(-1));
 
@@ -331,14 +320,13 @@ export class GPT extends Module {
 
             let logits = this.forward(idx_cond);
 
+            // console.log(`logits ${logits.shape} ${logits.strides}`, logits);
+
             // pluck the logits at the final step and scale by desired temperature
-            const logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]);
-            const logits_temp_temp = new Tensor(logits_temp.data.getData(), {device: this.config.device});
-            // throw {
-            //     foo: logits_temp_temp,
-            //     error: new Error()
-            // };
-            logits = logits_temp_temp.div(temperature).reshape([1,65]);
+            let logits_temp = logits.slice([null, [logits.shape[1]-1, logits.shape[1]], null]);
+            logits_temp = logits_temp.contiguous();
+            
+            logits = logits_temp.div(temperature).reshape([1,65]);
             
             const probs = logits.softmax(-1);
 

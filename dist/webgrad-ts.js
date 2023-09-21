@@ -448,6 +448,9 @@ var Texture = class {
       gl.bindTexture(gl.TEXTURE_2D, data.texture);
       this.texture = data.texture;
     } else {
+      if (data === null) {
+        console.warn("Created texture with data", data);
+      }
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, info.width, info.height, 0, info.format, info.type, data);
@@ -516,6 +519,24 @@ var Texture = class {
     return new Texture(data, { width, height, internalFormat: gl.R32F, format: gl.RED, type: gl.FLOAT, originalShape: [width, height] });
   }
 };
+var PingPongOutputTexture = class {
+  constructor(texture) {
+    this.textures = [texture, Texture.createUnpackedFromShape(null, texture.originalShape)];
+    this.currentInputIndex = 0;
+    this.currentOutputIndex = 1;
+  }
+  get input() {
+    return this.textures[this.currentInputIndex];
+  }
+  get output() {
+    return this.textures[this.currentOutputIndex];
+  }
+  swap() {
+    const tmp = this.currentInputIndex;
+    this.currentInputIndex = this.currentOutputIndex;
+    this.currentOutputIndex = tmp;
+  }
+};
 var _WEBGLCache = class {
   static hashCode(s) {
     let h = 0;
@@ -552,10 +573,23 @@ var _WEBGLCache = class {
     const key = _WEBGLCache.hashCode(code);
     return _WEBGLCache.programCache.has(key);
   }
+  static getBuffer(name) {
+    const key = _WEBGLCache.hashCode(name);
+    return _WEBGLCache.bufferCache.has(key) ? _WEBGLCache.bufferCache.get(key) : null;
+  }
+  static setBuffer(name, buffer) {
+    const key = _WEBGLCache.hashCode(name);
+    _WEBGLCache.bufferCache.set(key, buffer);
+  }
+  static hasBuffer(name) {
+    const key = _WEBGLCache.hashCode(name);
+    return _WEBGLCache.bufferCache.has(key);
+  }
 };
 var WEBGLCache = _WEBGLCache;
 WEBGLCache.shaderCache = /* @__PURE__ */ new Map();
 WEBGLCache.programCache = /* @__PURE__ */ new Map();
+WEBGLCache.bufferCache = /* @__PURE__ */ new Map();
 var _WEBGLContext = class {
   static get gl() {
     if (!_WEBGLContext._gl)
@@ -581,6 +615,12 @@ var _WEBGLContext = class {
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.DITHER);
+    _WEBGLContext.fb = gl.createFramebuffer();
     return gl;
   }
   static compileShader(gl, shaderType, shaderCode) {
@@ -629,7 +669,6 @@ var _WEBGLContext = class {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.uniform1i(textureLocation, location);
     return textureLocation;
   }
   static processUniforms(gl, program, uniforms) {
@@ -687,14 +726,18 @@ var _WEBGLContext = class {
       shaderProgram = _WEBGLContext.createShaderProgram(gl, vertexShader, fragmentShader);
       WEBGLCache.setProgram(shader, shaderProgram);
     }
-    const quadVertexBuffer = _WEBGLContext.createQuad(gl, shaderProgram);
+    let quadVertexBuffer = WEBGLCache.getBuffer(shader);
+    if (quadVertexBuffer === null) {
+      quadVertexBuffer = _WEBGLContext.createQuad(gl, shaderProgram);
+      WEBGLCache.setBuffer(shader, quadVertexBuffer);
+    }
     gl.useProgram(shaderProgram);
     _WEBGLContext.processUniforms(gl, shaderProgram, uniforms);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, output.width, output.height);
     _WEBGLContext.bindTexture(gl, output.texture, shaderProgram, 0);
-    const fb = gl.createFramebuffer();
+    const fb = _WEBGLContext.fb;
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, output.texture, 0);
     for (let i = 0; i < inputs.length; i++) {
@@ -799,6 +842,14 @@ var WEBGLBuffer = class extends TensorBuffer {
     }
     return this.texture;
   }
+  createUnpackedTextureFromShape(data, shape) {
+    if (!this.data && !this.texture)
+      throw Error("Tried to create unpacked texture without a data or texture field");
+    if (!this.texture || !equalArrays(this.shape, this.texture.originalShape)) {
+      this.texture = Texture.createUnpackedFromShape(data, shape);
+    }
+    return this.texture;
+  }
   unary_op(op) {
     function processOp(op2) {
       if (op2 === 0 /* ABS */)
@@ -884,8 +935,7 @@ var WEBGLBuffer = class extends TensorBuffer {
       return array.reduce((p, c) => p * c);
     }
     const axisLength = axes.length === this.shape.length ? prod(this.shape) : this.shape[this.shape.length - 1];
-    function sumDim(input, shape, stride2) {
-      const outputTexture2 = Texture.createUnpackedFromShape(null, shape);
+    function sumDim(input, shape, stride2, outputTexture2) {
       const uniforms2 = [
         { name: "width", value: outputTexture2.width, type: 4 /* INT */ },
         { name: "u_stride", value: stride2, type: 4 /* INT */ },
@@ -943,13 +993,15 @@ var WEBGLBuffer = class extends TensorBuffer {
       return outputTexture2;
     }
     const inputTexture = this.createUnpackedTexture();
-    let outputTexture = inputTexture;
     let stride = 1;
+    const outPing = new PingPongOutputTexture(inputTexture);
     const totalNumberOfElements = prod(this.shape);
     while (stride < totalNumberOfElements) {
-      outputTexture = sumDim(outputTexture, this.shape, stride);
+      sumDim(outPing.input, this.shape, stride, outPing.output);
+      outPing.swap();
       stride *= 2;
     }
+    const outputTexture = outPing.input;
     const outputTexturePacked = Texture.createUnpackedFromShape(null, this.shape);
     const uniforms = [
       { name: "width", value: outputTexturePacked.width, type: 4 /* INT */ },

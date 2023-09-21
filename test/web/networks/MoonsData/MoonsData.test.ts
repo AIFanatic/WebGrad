@@ -58,6 +58,7 @@ export function NetworkMoonsData(device: Device) {
         const model = new SimpleModel(2, 1).to(device);
 
         // Train
+        const learning_rate = new Tensor(0.5, {device: device});
         let last_loss: Tensor = new Tensor(0, {device: device});
         const epochs = 100;
         for (let k = 0; k < epochs; k++) {
@@ -69,7 +70,7 @@ export function NetworkMoonsData(device: Device) {
             loss.backward();
     
             for (let p of model.parameters()) {
-                p.data = p.sub(new Tensor(p.grad).mul(0.5)).data;
+                p.data = p.sub(new Tensor(p.grad).mul(learning_rate)).data;
             }
     
             last_loss = loss;

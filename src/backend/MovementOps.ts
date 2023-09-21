@@ -5,8 +5,6 @@ export class MovementOp {
     // TODO: Fix this, should be an op along from FROM, CONTIGUOUS etc
     // This is slow, there are more efficient ways to make it contiguous like updating the data as needed instead of the whole thing
     public static contiguous(x: TensorBuffer): TensorBuffer {
-        // return new Tensor(x.data.getData(), {device: x.device});
-
         return x.contiguous();
     }
     
